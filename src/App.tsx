@@ -11,7 +11,6 @@ import {LevelPage} from './pages/LevelPage';
 import {ProfilePage} from './pages/ProfilePage';
 import {AdminPage} from './pages/AdminPage';
 import {ProtectedRoute} from './components/ProtectedRoute';
-import {useState} from "react";
 
 
 function App() {

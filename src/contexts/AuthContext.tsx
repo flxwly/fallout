@@ -53,8 +53,6 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                 .eq('id', userId)
                 .single()
 
-            console.log("Got: ", data)
-
             if (error) throw error
             setUser(data)
         } catch (error) {
@@ -77,11 +75,10 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                     id: 'demo-admin-id',
                     username: 'admin',
                     email: 'admin@example.com',
-                    role: 'admin',
+                    role: "ADMIN",
                     knowledge_points: 0,
                     dose_msv: 0,
-                    created_at: new Date().toISOString(),
-                    last_login: new Date().toISOString()
+                    created_at: new Date().toISOString()
                 }
                 setUser(demoUser)
                 setSession({
@@ -106,11 +103,10 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                     id: 'demo-student-id',
                     username: 'student1',
                     email: 'student1@example.com',
-                    role: 'student',
+                    role: "STUDENT",
                     knowledge_points: 15,
                     dose_msv: 0.5,
-                    created_at: new Date().toISOString(),
-                    last_login: new Date().toISOString()
+                    created_at: new Date().toISOString()
                 }
                 setUser(demoUser)
                 setSession({
@@ -190,13 +186,14 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                 // Create user profile
 
                 console.log("Creating new user profile")
+
                 const {error: profileError} = await supabase
                     .from('user_profiles')
                     .insert({
                         id: data.user.id,
                         username: username,
                         email: email,
-                        role: 'student',
+                        role: "STUDENT",
                         knowledge_points: 0,
                         dose_msv: 0.0,
                     })
