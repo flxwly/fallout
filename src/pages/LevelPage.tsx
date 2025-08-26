@@ -34,7 +34,7 @@ export const LevelPage: React.FC = () => {
       await loadTasks(levelId);
       await startLevel(levelId);
     } catch (error) {
-      toast.error('Fehler beim Laden des Levels');
+      toast.error('Error while loading level...');
       navigate('/game');
     } finally {
       setLoading(false);
@@ -59,10 +59,9 @@ export const LevelPage: React.FC = () => {
     try {
       setEvaluatingReasoning(true);
       
-      // Always use the sophisticated local analysis for now
-      // This ensures consistent, high-quality feedback regardless of external dependencies
-      console.log('Using advanced local AI analysis...');
-      return generateAdvancedLocalFeedback(studentReasoning, isCorrect, taskPrompt, selectedAnswer);
+      // Always use local demo analysis for now
+      console.log('Using demo analysis...');
+      return generateLocalDemoFeedback(studentReasoning, isCorrect, taskPrompt, selectedAnswer);
 
     } catch (error) {
       console.log('Fallback to basic analysis:', error);
@@ -72,8 +71,9 @@ export const LevelPage: React.FC = () => {
     }
   };
 
-  // Sophisticated local AI-like analysis
-  const generateAdvancedLocalFeedback = (
+  // Demo analysis based on length and keywords
+  // Not AI. TODO: maybe add notice that no AI was used and this feedback is easily deceived.
+  const generateLocalDemoFeedback = (
     reasoning: string, 
     isCorrect: boolean, 
     taskPrompt: string, 

@@ -14,7 +14,6 @@ export interface User {
   id: string
   username: string
   email?: string
-  password_hash: string
   role: 'student' | 'admin'
   knowledge_points: number
   dose_msv: number

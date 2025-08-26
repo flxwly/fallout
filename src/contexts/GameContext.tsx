@@ -70,7 +70,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       updated_at: new Date().toISOString()
     }
   ]
-
   const demoTasks: { [levelId: string]: Task[] } = {
     'demo-level-1': [
       {
@@ -115,7 +114,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
     ]
   }
-
   const demoOptions: { [taskId: string]: Option[] } = {
     'demo-task-shopping': [
       {
