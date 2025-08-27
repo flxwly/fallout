@@ -130,15 +130,17 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
             const {data: userData, error: userError} = await supabase
                 .from('user_profiles')
                 .select('email')
+                .eq('username', username)
+                .single()
 
             console.log(userData, userError)
 
-            if (userError || !userData || userData.length === 0 || !userData[0]?.email) {
+            if (userError || !userData || !userData?.email) {
                 return {error: 'Invalid username or password'}
             }
 
             const {error} = await supabase.auth.signInWithPassword({
-                email: userData[0].email,
+                email: userData.email,
                 password: password,
             })
 
