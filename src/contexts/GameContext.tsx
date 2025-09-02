@@ -14,7 +14,7 @@ interface GameContextType {
     loadLevel: (levelId: string) => Promise<void>
     loadTasks: (levelId: string) => Promise<void>
     loadOptions: (taskId: string) => Promise<void>
-    submitAnswer: (taskId: string, answer: any) => Promise<{ success: boolean; feedback?: string }>
+    submitAnswer: (taskId: string, answer: never) => Promise<{ success: boolean; feedback?: string }>
     getUserProgress: () => Promise<void>
     startLevel: (levelId: string) => Promise<void>
     completeLevel: (levelId: string) => Promise<void>
@@ -122,8 +122,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'A) T-Shirt (0€) - Bietet keinen Schutz vor Strahlung',
                 points_awarded: 2,
                 dose_delta_msv: 3.0,
-                is_correct: false,
-                ordering: 1
+                is_correct: false
             },
             {
                 id: 'demo-option-radiation-suit',
@@ -131,8 +130,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'B) Gelber Strahlenschutzanzug (50€) - Professioneller Schutz vor radioaktiver Strahlung',
                 points_awarded: 8,
                 dose_delta_msv: 0.0,
-                is_correct: true,
-                ordering: 2
+                is_correct: true
             },
             {
                 id: 'demo-option-winter-jacket',
@@ -140,8 +138,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'C) Dicke Winterjacke (20€) - Normale Kleidung, etwas Schutz vor Kälte',
                 points_awarded: 4,
                 dose_delta_msv: 1.5,
-                is_correct: false,
-                ordering: 3
+                is_correct: false
             },
             {
                 id: 'demo-option-mask',
@@ -149,8 +146,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'D) Normale Schutzmaske (20€) - Schutz vor Staub, aber nicht vor Strahlung',
                 points_awarded: 3,
                 dose_delta_msv: 2.0,
-                is_correct: false,
-                ordering: 4
+                is_correct: false
             },
             {
                 id: 'demo-option-mouth-protection',
@@ -158,8 +154,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'E) Mundschutz (3€) - Minimaler Schutz vor Partikeln',
                 points_awarded: 2,
                 dose_delta_msv: 2.5,
-                is_correct: false,
-                ordering: 5
+                is_correct: false
             },
             {
                 id: 'demo-option-cap',
@@ -167,8 +162,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'F) Mütze (5€) - Schutz vor Sonne, nicht vor Strahlung',
                 points_awarded: 1,
                 dose_delta_msv: 2.8,
-                is_correct: false,
-                ordering: 6
+                is_correct: false
             },
             {
                 id: 'demo-option-filter-mask',
@@ -176,8 +170,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'G) Filtermaske fürs komplette Gesicht (70€) - Guter Schutz vor radioaktiven Partikeln',
                 points_awarded: 7,
                 dose_delta_msv: 0.5,
-                is_correct: true,
-                ordering: 7
+                is_correct: true
             }
         ],
         'demo-task-3': [
@@ -187,8 +180,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: '1 mSv pro Jahr ist der Grenzwert für die Allgemeinbevölkerung in Deutschland',
                 points_awarded: 5,
                 dose_delta_msv: 0.0,
-                is_correct: true,
-                ordering: 1
+                is_correct: true
             },
             {
                 id: 'demo-option-6',
@@ -196,8 +188,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'Je höher die Dosis, desto besser für die Gesundheit',
                 points_awarded: 0,
                 dose_delta_msv: 3.0,
-                is_correct: false,
-                ordering: 2
+                is_correct: false
             },
             {
                 id: 'demo-option-7',
@@ -205,8 +196,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'Strahlendosen sind nur bei direktem Kontakt gefährlich',
                 points_awarded: 1,
                 dose_delta_msv: 1.5,
-                is_correct: false,
-                ordering: 3
+                is_correct: false
             },
             {
                 id: 'demo-option-8',
@@ -214,8 +204,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'Radioaktive Strahlung ist grundsätzlich ungefährlich',
                 points_awarded: 0,
                 dose_delta_msv: 5.0,
-                is_correct: false,
-                ordering: 4
+                is_correct: false
             }
         ],
         'demo-task-4': [
@@ -225,8 +214,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'In der Krebstherapie und bei bildgebenden Verfahren wie PET',
                 points_awarded: 5,
                 dose_delta_msv: 0.0,
-                is_correct: true,
-                ordering: 1
+                is_correct: true
             },
             {
                 id: 'demo-option-10',
@@ -234,8 +222,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'Nur zur Desinfektion von Operationssälen',
                 points_awarded: 2,
                 dose_delta_msv: 0.2,
-                is_correct: false,
-                ordering: 2
+                is_correct: false
             },
             {
                 id: 'demo-option-11',
@@ -243,8 +230,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'Ausschließlich zur Behandlung von Knochenbrüchen',
                 points_awarded: 0,
                 dose_delta_msv: 1.0,
-                is_correct: false,
-                ordering: 3
+                is_correct: false
             },
             {
                 id: 'demo-option-12',
@@ -252,8 +238,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
                 option_text: 'Radioaktivität wird nicht in der Medizin verwendet',
                 points_awarded: 0,
                 dose_delta_msv: 2.0,
-                is_correct: false,
-                ordering: 4
+                is_correct: false
             }
         ]
     }
@@ -295,7 +280,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
     }
 
     const loadTasks = async (levelId: string) => {
-      console.log('Loading levels from database...')
+        console.log('Loading levels from database...')
         const {data, error} = await supabase
             .from('tasks')
             .select('*')
@@ -332,7 +317,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
         }
     }
 
-    const submitAnswer = async (taskId: string, answer: any) => {
+    const submitAnswer = async (taskId: string, answer: never) => {
         if (!user) return {success: false}
 
         // For demo users, simulate answer submission
@@ -350,17 +335,16 @@ export function GameProvider({children}: { children: React.ReactNode }) {
             return
         }
 
-        try {
-            const {data, error} = await supabase
-                .from('user_level_progress')
-                .select('*')
-                .eq('user_id', user.id)
+        const {data, error} = await supabase
+            .from('user_level_progress')
+            .select('*')
+            .eq('user_id', user.id)
 
-            if (error) throw error
-            setUserProgress(data || [])
-        } catch (error) {
+        if (error) {
             console.error('Error loading user progress:', error)
         }
+
+        setUserProgress(data || [])
     }
 
     const startLevel = async (levelId: string) => {
@@ -373,20 +357,19 @@ export function GameProvider({children}: { children: React.ReactNode }) {
             return
         }
 
-        try {
-            const {error} = await supabase
-                .from('user_level_progress')
-                .upsert({
-                    user_id: user.id,
-                    level_id: levelId,
-                    completed: false
-                })
+        const {error} = await supabase
+            .from('user_level_progress')
+            .upsert({
+                user_id: user.id,
+                level_id: levelId,
+                completed: false
+            })
 
-            if (error) throw error
-            await getUserProgress()
-        } catch (error) {
+        if (error) {
             console.error('Error starting level:', error)
         }
+
+        await getUserProgress()
     }
 
     const completeLevel = async (levelId: string) => {
@@ -399,21 +382,20 @@ export function GameProvider({children}: { children: React.ReactNode }) {
             return
         }
 
-        try {
-            const {error} = await supabase
-                .from('user_level_progress')
-                .update({
-                    completed: true,
-                    completed_at: new Date().toISOString()
-                })
-                .eq('user_id', user.id)
-                .eq('level_id', levelId)
+        const {error} = await supabase
+            .from('user_level_progress')
+            .update({
+                completed: true,
+                completed_at: new Date().toISOString()
+            })
+            .eq('user_id', user.id)
+            .eq('level_id', levelId)
 
-            if (error) throw error
-            await getUserProgress()
-        } catch (error) {
+        if (error) {
             console.error('Error completing level:', error)
         }
+
+        await getUserProgress()
     }
 
     // Initialize demo data immediately when component mounts
@@ -422,7 +404,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
         setLevels(demoLevels)
 
         if (user && !isDemoUser(user.id)) {
-            getUserProgress()
+            void getUserProgress()
         }
     }, [])
 
@@ -433,7 +415,7 @@ export function GameProvider({children}: { children: React.ReactNode }) {
             setLevels(demoLevels)
 
             if (!isDemoUser(user.id)) {
-                getUserProgress()
+                void getUserProgress()
             }
         }
     }, [user])
@@ -459,8 +441,9 @@ export function GameProvider({children}: { children: React.ReactNode }) {
     return <GameContext.Provider value={value}>{children}</GameContext.Provider>
 }
 
-export function useGame() {
-    const context = useContext(GameContext)
+// eslint-disable-next-line react-refresh/only-export-components
+export function useGame(): GameContextType {
+    const context: GameContextType | undefined = useContext(GameContext)
     if (context === undefined) {
         throw new Error('useGame must be used within a GameProvider')
     }

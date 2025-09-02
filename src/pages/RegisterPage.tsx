@@ -13,7 +13,7 @@ export const RegisterPage: React.FC = () => {
     const {user, signUp} = useAuth();
 
     if (user) {
-        return <Navigate to={user.role === 'admin' ? '/admin' : '/game'} replace/>;
+        return <Navigate to={user.role === 'ADMIN' ? '/admin' : '/game'} replace/>;
     }
 
     const handleSubmit = async (e: React.FormEvent) => {

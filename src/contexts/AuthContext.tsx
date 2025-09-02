@@ -33,6 +33,7 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
         // Listen for auth changes
         const {data: {subscription}} = supabase.auth.onAuthStateChange(async (_event, session) => {
             setSession(session)
+            console.log("Session changed: ", session)
             if (session?.user) {
                 await fetchUserProfile(session.user.id)
             } else {
@@ -71,6 +72,7 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
             // Handle demo credentials specially
             if (username === 'admin' && password === 'admin123') {
                 // Create a demo admin session
+                console.log("Logging in as demo admin")
                 const demoUser: User = {
                     id: 'demo-admin-id',
                     username: 'admin',
@@ -81,7 +83,7 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                     created_at: new Date().toISOString()
                 }
                 setUser(demoUser)
-                setSession({
+                const session: Session = {
                     access_token: 'demo-token',
                     refresh_token: 'demo-refresh',
                     expires_in: 3600,
@@ -92,9 +94,13 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                         created_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
                         aud: 'authenticated',
-                        role: 'authenticated'
+                        role: 'authenticated',
+                        app_metadata: {},
+                        user_metadata: {}
                     }
-                } as Session)
+                }
+                console.log(demoUser)
+                setSession(session)
                 return {}
             }
             if (username === 'student1' && password === 'admin123') {
@@ -132,8 +138,6 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                 .select('email')
                 .eq('username', username)
                 .single()
-
-            console.log(userData, userError)
 
             if (userError || !userData || !userData?.email) {
                 return {error: 'Invalid username or password'}
@@ -186,7 +190,6 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
 
             if (data.user) {
                 // Create user profile
-
                 console.log("Creating new user profile")
 
                 const {error: profileError} = await supabase
@@ -236,6 +239,7 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
     const context = useContext(AuthContext)
     if (context === undefined) {

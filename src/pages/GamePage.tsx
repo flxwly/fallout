@@ -21,12 +21,6 @@ export const GamePage: React.FC = () => {
     );
   }
 
-  const getSafetyColor = (dose: number) => {
-    if (dose > 5) return 'text-red-600 bg-red-100 border-red-300';
-    if (dose > 2) return 'text-yellow-600 bg-yellow-100 border-yellow-300';
-    return 'text-green-600 bg-green-100 border-green-300';
-  };
-
   const getHealthStatus = (dose: number) => {
     if (dose > 5) return { icon: '💀', status: 'Kritisch', color: 'text-red-600' };
     if (dose > 2) return { icon: '🤒', status: 'Krank', color: 'text-yellow-600' };

@@ -44,7 +44,7 @@ export const ProfilePage: React.FC = () => {
         </div>
       </div>
 
-      {user?.role === 'student' && (
+      {user?.role === 'STUDENT' && (
         <div className="bg-white rounded-lg shadow-lg p-8">
           <h3 className="text-xl font-bold text-gray-800 mb-6">Spielstatistiken</h3>
 
