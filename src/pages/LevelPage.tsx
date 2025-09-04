@@ -267,6 +267,11 @@ export const LevelPage: React.FC = () => {
         const userReasoning = reasoning[task.id];
 
 
+        if (!currentLevel) {
+            toast.error('Kein Level geladen');
+            return;
+        }
+
         if (!user) {
             toast.error('Kein Nutzer angemeldet');
             return;
@@ -285,6 +290,9 @@ export const LevelPage: React.FC = () => {
         try {
             setSubmitting(true);
 
+            // TODO: Make isCorrect optional for free text answers.
+            //  In that case let the AI decide if the answer is correct.
+            //  Also reward points based on qualityScore.
             const selectedOption = options.find(opt => opt.id === answer);
             const isCorrect = selectedOption?.is_correct || false;
             const pointsAwarded = selectedOption?.points_awarded || 0;
@@ -309,15 +317,22 @@ export const LevelPage: React.FC = () => {
             const {error} = await supabase
                 .from("attempts")
                 .insert({
+                    user_id: user.id,
+                    level_id: currentLevel.id,
+                    task_id: task.id,
+                    option_id: selectedOption?.id || null,
+
+                    answer: selectedOption?.option_text || answer,
+                    reasoning: userReasoning,
+
+                    is_correct: isCorrect,
+                    points_got: pointsAwarded,
+                    dose_msv_got: doseReceived,
+
                     ai_feedback: aiEvaluation.feedback,
                     ai_suggestions: aiEvaluation.suggestions,
                     ai_score: aiEvaluation.qualityScore,
-                    answer: selectedOption?.option_text || answer,
-                    user_id: user.id,
-                    task_id: task.id,
-                    reasoning: userReasoning,
-                    points_got: pointsAwarded,
-                    dose_msv_got: doseReceived,
+
                     timestamp: new Date().toISOString()
                 });
 

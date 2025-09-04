@@ -3,6 +3,7 @@ create table public.options
     id             text    not null default gen_random_uuid(),
     task_id        text    not null default gen_random_uuid(),
     option_text    text    not null default ''::text,
+    cost       bigint  not null default 0,
     points_awarded bigint  not null default 0,
     dose_delta_msv bigint  not null default 0,
     is_correct     boolean not null default false,

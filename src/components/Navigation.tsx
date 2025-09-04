@@ -15,7 +15,8 @@ export const Navigation: React.FC = () => {
         return '💚';
     };
 
-    return (<nav className="bg-gradient-to-r from-gray-800 to-gray-900 shadow-lg border-b-2 border-red-600">
+    return (
+        <nav className="bg-gradient-to-r from-gray-800 to-gray-900 shadow-lg border-b-2 border-red-600">
             <div className="container mx-auto px-4">
                 <div className="flex justify-between items-center py-4">
                     <div className="flex items-center space-x-2">

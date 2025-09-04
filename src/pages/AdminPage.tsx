@@ -27,11 +27,44 @@ import toast from 'react-hot-toast';
 import {useAuth} from '../contexts/AuthContext';
 import {supabase} from "../supabase/supabase.ts";
 
+type LevelData = {
+    id: string,
+    title: string,
+    intro_text: string,
+    ordering: number,
+    is_active: boolean,
+    tasks: TaskData[]
+}
+
+type TaskData = {
+    id: string,
+    type: 'mc' | 'free',
+    prompt_text: string,
+    ordering: number,
+    is_active: boolean,
+    evaluation_criteria: string,
+    options: OptionData[]
+}
+
+type OptionData = {
+    id: string,
+    option_text: string,
+    points_awarded: number,
+    cost: number,
+    dose_delta_msv: number,
+    is_correct: boolean
+}
+
 // Enhanced Level Editor Component
 const LevelEditor: React.FC<{
-    level?: any; onSave: (levelData: any) => void; onCancel: () => void;
-}> = ({level, onSave, onCancel}) => {
-    const [formData, setFormData] = useState({
+    level?: LevelData;
+    onSave: (levelData: LevelData) => void;
+    onCancel: () => void;
+}> = (
+    {level, onSave, onCancel}) => {
+
+    const [levelData, setLevelData] = useState({
+        id: level?.id || 'level-' + new Date().toISOString() + '-' + Math.floor(Math.random() * 256).toString(16),
         title: level?.title || '',
         intro_text: level?.intro_text || '',
         ordering: level?.ordering || 1,
@@ -39,52 +72,63 @@ const LevelEditor: React.FC<{
         tasks: level?.tasks || []
     });
 
-    const [currentTask, setCurrentTask] = useState<any>(null);
+    const [currentTask, setCurrentTask] = useState<TaskData | null>(null);
     const [showTaskEditor, setShowTaskEditor] = useState(false);
 
-    const handleSave = () => {
-        if (!formData.title.trim()) {
+    const handleSaveLevel = () => {
+        if (!levelData.title.trim()) {
             toast.error('Titel ist erforderlich');
             return;
         }
-        onSave(formData);
+
+        console.log("Saving level:", levelData);
+        onSave(levelData);
     };
 
     const handleAddTask = () => {
-        setCurrentTask({
-            id: `task-${Date.now()}`,
+        const taskData: TaskData = {
+            id: 'task-' + new Date().toISOString() + '-' + Math.floor(Math.random() * 256).toString(16),
             type: 'mc',
             prompt_text: '',
-            ordering: formData.tasks.length + 1,
+            ordering: levelData.tasks.length + 1,
             is_active: true,
             options: [],
             evaluation_criteria: ''
-        });
+        }
+        setCurrentTask(taskData);
         setShowTaskEditor(true);
     };
 
-    const handleEditTask = (task: any) => {
-        setCurrentTask(task);
+    const handleEditTask = (taskData: TaskData) => {
+        setCurrentTask(taskData);
         setShowTaskEditor(true);
     };
 
-    const handleSaveTask = (taskData: any) => {
-        const updatedTasks = currentTask.id.startsWith('task-') && !formData.tasks.find((t: any) => t.id === currentTask.id) ? [...formData.tasks, taskData] : formData.tasks.map((t: any) => t.id === taskData.id ? taskData : t);
+    const handleSaveTask = (taskData: TaskData) => {
+        if (!currentTask) return
 
-        setFormData(prev => ({...prev, tasks: updatedTasks}));
+        console.log("Saving task:", taskData);
+
+        const currentTaskIndex = levelData.tasks.findIndex((t: TaskData) => t.id === currentTask.id);
+
+        const updatedTasks = currentTaskIndex === -1 ? [...levelData.tasks, taskData] : levelData.tasks.map((t: TaskData) => t.id === taskData.id ? taskData : t);
+
+        setLevelData(prev => ({...prev, tasks: updatedTasks}));
         setShowTaskEditor(false);
         setCurrentTask(null);
     };
 
     const handleDeleteTask = (taskId: string) => {
         if (window.confirm('Aufgabe wirklich löschen?')) {
-            setFormData(prev => ({
-                ...prev, tasks: prev.tasks.filter((t: any) => t.id !== taskId)
+            setLevelData(prev => ({
+                ...prev, tasks: prev.tasks.filter((t: TaskData) => t.id !== taskId)
             }));
         }
     };
 
     if (showTaskEditor) {
+        console.log("Editing task:", currentTask);
+        if (!currentTask) return null;
         return (<TaskEditor
             task={currentTask}
             onSave={handleSaveTask}
@@ -113,8 +157,8 @@ const LevelEditor: React.FC<{
                 </label>
                 <input
                     type="text"
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({...prev, title: e.target.value}))}
+                    value={levelData.title}
+                    onChange={(e) => setLevelData(prev => ({...prev, title: e.target.value}))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="z.B. Die verstrahlten Ruinen"
                 />
@@ -126,8 +170,8 @@ const LevelEditor: React.FC<{
                 </label>
                 <input
                     type="number"
-                    value={formData.ordering}
-                    onChange={(e) => setFormData(prev => ({...prev, ordering: parseInt(e.target.value) || 1}))}
+                    value={levelData.ordering}
+                    onChange={(e) => setLevelData(prev => ({...prev, ordering: parseInt(e.target.value) || 1}))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     min="1"
                 />
@@ -139,8 +183,8 @@ const LevelEditor: React.FC<{
                 Einführungstext
             </label>
             <textarea
-                value={formData.intro_text}
-                onChange={(e) => setFormData(prev => ({...prev, intro_text: e.target.value}))}
+                value={levelData.intro_text}
+                onChange={(e) => setLevelData(prev => ({...prev, intro_text: e.target.value}))}
                 rows={6}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Beschreibe das Setting und was die Schüler lernen werden..."
@@ -151,8 +195,8 @@ const LevelEditor: React.FC<{
             <label className="flex items-center">
                 <input
                     type="checkbox"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData(prev => ({...prev, is_active: e.target.checked}))}
+                    checked={levelData.is_active}
+                    onChange={(e) => setLevelData(prev => ({...prev, is_active: e.target.checked}))}
                     className="mr-2 text-blue-600 focus:ring-blue-500"
                 />
                 <span className="text-sm text-gray-700">Level ist aktiv</span>
@@ -162,7 +206,7 @@ const LevelEditor: React.FC<{
         {/* Tasks Section */}
         <div className="border-t pt-6">
             <div className="flex justify-between items-center mb-4">
-                <h4 className="text-lg font-medium text-gray-800">Aufgaben ({formData.tasks.length})</h4>
+                <h4 className="text-lg font-medium text-gray-800">Aufgaben ({levelData.tasks.length})</h4>
                 <button
                     onClick={handleAddTask}
                     className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -173,7 +217,7 @@ const LevelEditor: React.FC<{
             </div>
 
             <div className="space-y-4">
-                {formData.tasks.map((task: any, index: number) => (
+                {levelData.tasks.map((task: TaskData) => (
                     <div key={task.id} className="border border-gray-200 rounded-lg p-4">
                         <div className="flex justify-between items-start">
                             <div className="flex-1">
@@ -205,7 +249,7 @@ const LevelEditor: React.FC<{
                         </div>
                     </div>))}
 
-                {formData.tasks.length === 0 && (<div className="text-center py-8 text-gray-500">
+                {levelData.tasks.length === 0 && (<div className="text-center py-8 text-gray-500">
                     <BookOpen className="h-12 w-12 mx-auto mb-2 text-gray-300"/>
                     <p>Noch keine Aufgaben erstellt</p>
                     <p className="text-sm">Füge die erste Aufgabe hinzu</p>
@@ -222,7 +266,7 @@ const LevelEditor: React.FC<{
                 Abbrechen
             </button>
             <button
-                onClick={handleSave}
+                onClick={handleSaveLevel}
                 className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
                 <Save className="h-4 w-4"/>
@@ -234,9 +278,12 @@ const LevelEditor: React.FC<{
 
 // Task Editor Component
 const TaskEditor: React.FC<{
-    task: any; onSave: (taskData: any) => void; onCancel: () => void;
+    task: TaskData;
+    onSave: (taskData: TaskData) => void;
+    onCancel: () => void;
 }> = ({task, onSave, onCancel}) => {
-    const [formData, setFormData] = useState({
+
+    const [taskData, setTaskData] = useState({
         id: task.id,
         type: task.type || 'mc',
         prompt_text: task.prompt_text || '',
@@ -247,41 +294,40 @@ const TaskEditor: React.FC<{
     });
 
     const handleSave = () => {
-        if (!formData.prompt_text.trim()) {
+        if (!taskData.prompt_text.trim()) {
             toast.error('Aufgabenstellung ist erforderlich');
             return;
         }
-        if (formData.type === 'mc' && formData.options.length === 0) {
+        if (taskData.type === 'mc' && taskData.options.length === 0) {
             toast.error('Multiple Choice Aufgaben benötigen mindestens eine Antwortoption');
             return;
         }
-        onSave(formData);
+        onSave(taskData);
     };
 
     const handleAddOption = () => {
-        const newOption = {
-            id: `option-${Date.now()}`,
+        const newOption: OptionData = {
+            id: 'option-' + new Date().toISOString() + '-' + Math.floor(Math.random() * 256).toString(16),
             option_text: '',
             points_awarded: 0,
-            cost_euros: 0,
+            cost: 0,
             dose_delta_msv: 0,
-            is_correct: false,
-            ordering: formData.options.length + 1
+            is_correct: false
         };
-        setFormData(prev => ({
+        setTaskData(prev => ({
             ...prev, options: [...prev.options, newOption]
         }));
     };
 
-    const handleUpdateOption = (optionId: string, updates: any) => {
-        setFormData(prev => ({
-            ...prev, options: prev.options.map((opt: any) => opt.id === optionId ? {...opt, ...updates} : opt)
+    const handleUpdateOption = (optionId: string, updates: Partial<OptionData>) => {
+        setTaskData(prev => ({
+            ...prev, options: prev.options.map((opt: OptionData) => opt.id === optionId ? {...opt, ...updates} : opt)
         }));
     };
 
     const handleDeleteOption = (optionId: string) => {
-        setFormData(prev => ({
-            ...prev, options: prev.options.filter((opt: any) => opt.id !== optionId)
+        setTaskData(prev => ({
+            ...prev, options: prev.options.filter((option: OptionData) => option.id !== optionId)
         }));
     };
 
@@ -300,8 +346,10 @@ const TaskEditor: React.FC<{
                     Aufgabentyp
                 </label>
                 <select
-                    value={formData.type}
-                    onChange={(e) => setFormData(prev => ({...prev, type: e.target.value}))}
+                    value={taskData.type}
+                    onChange={(e) => setTaskData(prev => ({
+                        ...prev, type: e.type as 'mc' | 'free'
+                    }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                     <option value="mc">Multiple Choice</option>
@@ -315,8 +363,10 @@ const TaskEditor: React.FC<{
                 </label>
                 <input
                     type="number"
-                    value={formData.ordering}
-                    onChange={(e) => setFormData(prev => ({...prev, ordering: parseInt(e.target.value) || 1}))}
+                    value={taskData.ordering}
+                    onChange={(e) => setTaskData(prev => ({
+                        ...prev, ordering: parseInt(e.target.value) || 1
+                    }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     min="1"
                 />
@@ -328,8 +378,10 @@ const TaskEditor: React.FC<{
                 Aufgabenstellung *
             </label>
             <textarea
-                value={formData.prompt_text}
-                onChange={(e) => setFormData(prev => ({...prev, prompt_text: e.target.value}))}
+                value={taskData.prompt_text}
+                onChange={(e) => setTaskData(prev => ({
+                    ...prev, prompt_text: e.target.value
+                }))}
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Beschreibe die Aufgabe im Kontext des Spiels..."
@@ -341,8 +393,10 @@ const TaskEditor: React.FC<{
                 KI-Bewertungskriterien
             </label>
             <textarea
-                value={formData.evaluation_criteria}
-                onChange={(e) => setFormData(prev => ({...prev, evaluation_criteria: e.target.value}))}
+                value={taskData.evaluation_criteria}
+                onChange={(e) => setTaskData(prev => ({
+                    ...prev, evaluation_criteria: e.target.value
+                }))}
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 placeholder="Spezifische Kriterien für die KI-Bewertung der Schüler-Begründungen..."
@@ -353,7 +407,7 @@ const TaskEditor: React.FC<{
         </div>
 
         {/* Multiple Choice Options */}
-        {formData.type === 'mc' && (<div className="border-t pt-6">
+        {taskData.type === 'mc' && (<div className="border-t pt-6">
             <div className="flex justify-between items-center mb-4">
                 <h4 className="text-lg font-medium text-gray-800">Antwortoptionen</h4>
                 <button
@@ -366,7 +420,7 @@ const TaskEditor: React.FC<{
             </div>
 
             <div className="space-y-4">
-                {formData.options.map((option: any, index: number) => (
+                {taskData.options.map((option: OptionData) => (
                     <div key={option.id} className="border border-gray-200 rounded-lg p-4">
                         <div className="grid md:grid-cols-2 gap-4 mb-4">
                             <div className="md:col-span-2">
@@ -404,8 +458,8 @@ const TaskEditor: React.FC<{
                                 </label>
                                 <input
                                     type="number"
-                                    value={option.cost_euros || 0}
-                                    onChange={(e) => handleUpdateOption(option.id, {cost_euros: parseInt(e.target.value) || 0})}
+                                    value={option.cost || 0}
+                                    onChange={(e) => handleUpdateOption(option.id, {cost: parseInt(e.target.value) || 0})}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     min="0"
                                 />
@@ -445,7 +499,7 @@ const TaskEditor: React.FC<{
                         </div>
                     </div>))}
 
-                {formData.options.length === 0 && (<div className="text-center py-8 text-gray-500">
+                {taskData.options.length === 0 && (<div className="text-center py-8 text-gray-500">
                     <Target className="h-12 w-12 mx-auto mb-2 text-gray-300"/>
                     <p>Noch keine Antwortoptionen</p>
                     <p className="text-sm">Füge die erste Option hinzu</p>
@@ -474,112 +528,91 @@ const TaskEditor: React.FC<{
 
 // Enhanced Admin Levels Component with full editor
 const AdminLevels: React.FC = () => {
-    const [levels, setLevels] = useState<any[]>([]);
+    const [levels, setLevels] = useState<LevelData[]>([]);
     const [loading, setLoading] = useState(false);
-    const [editingLevel, setEditingLevel] = useState<any>(null);
+    const [editingLevel, setEditingLevel] = useState<LevelData | null>(null);
     const [showCreateForm, setShowCreateForm] = useState(false);
 
-    // Demo levels data with the shopping task
-    const demoLevels = [{
-        id: 'demo-level-1',
-        title: 'Die verstrahlten Ruinen - Der Klamottenladen',
-        intro_text: 'Du erwachst in den Trümmern einer einst blühenden Stadt. Überall siehst du seltsame Warnschilder mit dem Strahlensymbol. Die Luft flimmert merkwürdig, und dein Geigerzähler klickt bedrohlich.\n\nAuf der Ecke findest du einen halb-zerstörten Klamottenladen, in den du hineingehst. Ein alter Mann verkauft dort übrig gebliebene Kleidung und andere nützliche Dinge.\n\nDu hast wie in jedem Computerspiel eine Gesundheitsleiste, ein gewisses Budget und eine Wissensleiste. Dein Ziel ist es am Ende die beiden Leisten möglichst voll zu haben. Das Geld spielt am Ende keine große Rolle.',
-        topic_tag: 'radioactivity',
-        ordering: 1,
-        is_active: true,
-        taskCount: 2,
-        tasks: [{
-            id: 'demo-task-shopping',
-            type: 'mc',
-            prompt_text: 'Du findest einen halb-zerstörten Klamottenladen, in den du hineingehst. Ein alter Mann verkauft dort übrig gebliebene Kleidung und andere nützliche Dinge. Du musst entscheiden, was du dort kaufen willst:',
-            ordering: 1,
-            evaluation_criteria: 'Bewerte ob der Schüler versteht, dass Strahlenschutz wichtiger ist als Kosten. Achte auf Verständnis von Schutzwirkung verschiedener Materialien.',
-            options: [{
-                id: 'opt1',
-                option_text: 'A) T-Shirt (0€)',
-                points_awarded: 2,
-                cost_euros: 0,
-                dose_delta_msv: 3.0,
-                is_correct: false
-            }, {
-                id: 'opt2',
-                option_text: 'B) Gelber Strahlenschutzanzug (50€)',
-                points_awarded: 8,
-                cost_euros: 50,
-                dose_delta_msv: 0.0,
-                is_correct: true
-            }, {
-                id: 'opt3',
-                option_text: 'C) Dicke Winterjacke (20€)',
-                points_awarded: 4,
-                cost_euros: 20,
-                dose_delta_msv: 1.5,
-                is_correct: false
-            }, {
-                id: 'opt4',
-                option_text: 'D) Normale Schutzmaske (20€)',
-                points_awarded: 3,
-                cost_euros: 20,
-                dose_delta_msv: 2.0,
-                is_correct: false
-            }, {
-                id: 'opt5',
-                option_text: 'E) Mundschutz (3€)',
-                points_awarded: 2,
-                cost_euros: 3,
-                dose_delta_msv: 2.5,
-                is_correct: false
-            }, {
-                id: 'opt6',
-                option_text: 'F) Mütze (5€)',
-                points_awarded: 1,
-                cost_euros: 5,
-                dose_delta_msv: 2.8,
-                is_correct: false
-            }, {
-                id: 'opt7',
-                option_text: 'G) Filtermaske fürs komplette Gesicht (70€)',
-                points_awarded: 7,
-                cost_euros: 70,
-                dose_delta_msv: 0.5,
-                is_correct: true
-            }]
-        }]
-    }, {
-        id: 'demo-level-2',
-        title: 'Das Strahlenschutz-Labor',
-        intro_text: 'Du findest ein verlassenes Labor mit funktionierenden Geräten...',
-        topic_tag: 'radioactivity',
-        ordering: 2,
-        is_active: true,
-        taskCount: 1,
-        tasks: []
-    }, {
-        id: 'demo-level-3',
-        title: 'Die Hoffnungszone',
-        intro_text: 'Du erreichst einen Bereich, wo die Strahlung schwächer ist...',
-        topic_tag: 'radioactivity',
-        ordering: 3,
-        is_active: true,
-        taskCount: 1,
-        tasks: []
-    }];
-
     useEffect(() => {
-        loadLevels();
+        void loadLevels();
     }, []);
 
     const loadLevels = async () => {
         setLoading(true);
-        setTimeout(() => {
-            setLevels(demoLevels);
+        setTimeout(async () => {
+            const {data, error} = await supabase
+                .from("levels")
+                .select("id, title, intro_text, ordering, is_active, tasks(id, type, prompt_text, ordering, is_active, evaluation_criteria, options(id, option_text, points_awarded, cost, dose_delta_msv, is_correct))")
+
+            if (error) {
+                console.error("Error loading levels:", error);
+                toast.error('Fehler beim Laden der Level');
+                setLevels([]);
+            } else {
+                const levelData: LevelData[] = data || [];
+                setLevels(levelData);
+            }
+
             setLoading(false);
         }, 500);
     };
 
-    const handleCreateLevel = async (levelData: any) => {
+    const uploadLevels = async (levelData: LevelData) => {
+        // 1. Insert quiz
+        const { error: levelError } = await supabase
+            .from("levels")
+            .upsert({
+                id: levelData.id,
+                title: levelData.title,
+                intro_text: levelData.intro_text,
+                ordering: levelData.ordering,
+                is_active: levelData.is_active,
+                topic_tag: 'radoiactivity',
+                updated_at: new Date().toISOString(),
+            });
+        if (levelError) throw levelError;
+
+        const taskData = levelData.tasks.map((taskData) => ({
+            id: taskData.id,
+            level_id: levelData.id,
+            type: taskData.type,
+            prompt_text: taskData.prompt_text,
+            ordering: taskData.ordering,
+            is_active: taskData.is_active,
+            evaluation_criteria: taskData.evaluation_criteria
+        }))
+        // 2. Insert questions
+        const {error: taskError} = await supabase
+            .from("tasks")
+            .upsert(taskData)
+
+        if (taskError) throw taskError;
+
+        const optionData = levelData.tasks.flatMap((task) =>
+            task.options.map((option) => ({
+                id: option.id,
+                task_id: task.id,
+                option_text: option.option_text,
+                points_awarded: option.points_awarded,
+                cost: option.cost,
+                dose_delta_msv: option.dose_delta_msv,
+                is_correct: option.is_correct
+            }))
+        );
+
+        // 3. Insert options
+        const {error: optionError} = await supabase
+            .from("options")
+            .upsert(optionData)
+
+        if (optionError) throw optionError;
+    }
+
+    const handleCreateLevel = async (levelData: LevelData) => {
         const level = {
-            id: `demo-level-${Date.now()}`, ...levelData, taskCount: levelData.tasks?.length || 0
+            ...levelData,
+            id: 'level-' + new Date().toISOString() + '-' + Math.floor(Math.random() * 256).toString(16),
+            taskCount: levelData.tasks?.length || 0
         };
 
         setLevels(prev => [...prev, level].sort((a, b) => a.ordering - b.ordering));
@@ -587,13 +620,16 @@ const AdminLevels: React.FC = () => {
         toast.success('Level erfolgreich erstellt!');
     };
 
-    const handleUpdateLevel = async (levelId: string, levelData: any) => {
+    const handleUpdateLevel = async (levelId: string, levelData: LevelData) => {
         setLevels(prev => prev.map(level => level.id === levelId ? {
             ...levelData,
             id: levelId,
-            taskCount: levelData.tasks?.length || 0
+            taskCount: levelData.tasks.length || 0
         } : level));
         setEditingLevel(null);
+
+        await uploadLevels(levelData);
+
         toast.success('Level erfolgreich aktualisiert!');
     };
 
@@ -660,7 +696,7 @@ const AdminLevels: React.FC = () => {
                           </span>)}
                                     <span
                                         className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                          {level.taskCount} Aufgaben
+                          {level.tasks.length} Aufgaben
                         </span>
                                 </div>
                             </div>
@@ -674,7 +710,7 @@ const AdminLevels: React.FC = () => {
                             {level.tasks && level.tasks.length > 0 && (
                                 <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                                     <h4 className="font-medium text-gray-800 mb-2">Aufgaben-Vorschau:</h4>
-                                    {level.tasks.slice(0, 2).map((task: any) => (
+                                    {level.tasks.slice(0, 2).map((task: TaskData) => (
                                         <div key={task.id} className="text-sm text-gray-600 mb-1">
                                             • {task.prompt_text.substring(0, 100)}...
                                         </div>))}
@@ -725,19 +761,32 @@ const AdminLevels: React.FC = () => {
 };
 
 type AttemptData = {
+    id: string
     timestamp: string,
-    user: string,
-    level: string,
-    level_prompt: string,
-    selected_answer: string,
-    reasoning: string,
+
+    level_title: string,
+
+    task_type: 'mc' | 'free',
+    task_prompt: string,
+
+    username: string,
+    answer: string,
     is_correct: boolean,
+    reasoning: string,
+
     points_got: number,
     dose_msv_got: number,
+
     ai_feedback: string,
     ai_score: number,
     ai_suggestions: string[]
 }
+
+const timeFormat = new Intl.DateTimeFormat('de-DE', {
+    dateStyle: "full",
+    timeStyle: "medium",
+    hourCycle: "h24"
+})
 
 // Student Attempts Tracking Component with AI Feedback (unchanged from previous version)
 const AdminAttempts: React.FC = () => {
@@ -756,16 +805,40 @@ const AdminAttempts: React.FC = () => {
 
         const {data, error} = await supabase
             .from("attempts")
-            .select("" + "*, " + "users( username )," + "tasks( type, prompt_text )")
+            .select(
+                "*," +
+                "user_profiles( username )," +
+                "levels( title )," +
+                "tasks( type, prompt_text )," +
+                "options( points_awarded, dose_delta_msv, is_correct )"
+            )
 
         if (error) {
             console.error("Couldn't get attempts from database", error);
-        }
+        } else {
+            console.log("Fetched attempts:", data);
+            const attemptsData: AttemptData[] = data.map((attempt: any): AttemptData => ({
+                id: attempt.id,
+                timestamp: attempt.timestamp,
 
-        if (data) {
-            console.log(data);
-        }
+                level_title: attempt.levels.title,
+                task_type: attempt.tasks.type,
+                task_prompt: attempt.tasks.prompt_text,
 
+                username: attempt.user_profiles.username,
+                answer: attempt.answer,
+                is_correct: attempt.options?.is_correct ? attempt.options.is_correct : false,
+                reasoning: attempt.reasoning,
+
+                points_got: attempt.points_got,
+                dose_msv_got: attempt.dose_msv_got,
+
+                ai_feedback: attempt.ai_feedback || "",
+                ai_score: attempt.ai_score || 0.0,
+                ai_suggestions: attempt.ai_suggestions || [],
+            }))
+            setAttempts(attemptsData)
+        }
         setLoading(false);
     };
 
@@ -782,10 +855,12 @@ const AdminAttempts: React.FC = () => {
         return true;
     });
 
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('de-DE', {
-            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-        });
+    const formatDate = (attempt: AttemptData) => {
+        // locale string formats:
+        // 24 Characters: YYYY-MM-DDTHH:mm:ss.sssZ
+        // 27 Characters: ±YYYYYY-MM-DDTHH:mm:ss.sssZ
+
+        return timeFormat.format(Date.parse(attempt.timestamp));
     };
 
     const getQualityColor = (score: number) => {
@@ -804,7 +879,9 @@ const AdminAttempts: React.FC = () => {
 
     const exportAttempts = () => {
 
+        toast.error('Die Funktion CSV-Export steht aktuell noch nicht zur Verfügung...');
 
+        /*
         const csvContent = [['Zeitstempel', 'Schüler', 'Level', 'Aufgabe', 'Antwort', 'Begründung', 'Korrekt', 'Punkte', 'Dosis', 'KI-Feedback', 'KI-Bewertung', 'KI-Vorschläge'].join(','), ...attempts.map(attempt => [formatDate(attempt.timestamp), attempt.user, attempt.level, `"${attempt.prompt_text.replace(/"/g, '""')}"`, `"${attempt.selected_answer.replace(/"/g, '""')}"`, `"${attempt.reasoning.replace(/"/g, '""')}"`, attempt.is_correct ? 'Ja' : 'Nein', attempt.points_got, attempt.dose_got_msv, `"${attempt.ai_feedback.replace(/"/g, '""')}"`, attempt.ai_quality_score || 'N/A', `"${(attempt.ai_suggestions || []).join('; ')}"`,].join(','))].join('\n');
 
         const blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8;'});
@@ -813,7 +890,9 @@ const AdminAttempts: React.FC = () => {
         link.download = `schueler-antworten-ki-feedback-${new Date().toISOString().split('T')[0]}.csv`;
         link.click();
         toast.success('CSV-Export mit KI-Daten erfolgreich!');
+        */
     };
+
 
     const averageQualityScore = attempts.length > 0 ? attempts.reduce((sum, attempt) => sum + (attempt.ai_score || 0), 0) / attempts.length : 0;
 
@@ -906,11 +985,11 @@ const AdminAttempts: React.FC = () => {
                                 <div className="flex items-center space-x-3 mb-2">
                                     <div
                                         className={`w-3 h-3 rounded-full ${attempt.is_correct ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                    <h3 className="font-semibold text-gray-800">{attempt.user}</h3>
-                                    <span className="text-sm text-gray-500">{attempt.level}</span>
+                                    <h3 className="font-semibold text-gray-800">{attempt.username}</h3>
+                                    <span className="text-sm text-gray-500">{attempt.level_title}</span>
                                     <div className="flex items-center space-x-1 text-xs text-gray-400">
                                         <Clock className="h-3 w-3"/>
-                                        <span>{formatDate(attempt.timestamp)}</span>
+                                        <span>{formatDate(attempt)}</span>
                                     </div>
                                     {/* AI Quality Score Badge */}
                                     {attempt.ai_score && (<div className="flex items-center space-x-1">
@@ -924,20 +1003,19 @@ const AdminAttempts: React.FC = () => {
 
                                 <div className="mb-3">
                                     <p className="text-gray-700 font-medium mb-1">Aufgabe:</p>
-                                    <p className="text-gray-600 text-sm">{attempt.level_prompt}</p>
+                                    <p className="text-gray-600 text-sm">{attempt.task_prompt + "(" + attempt.task_type + ")"}</p>
                                 </div>
 
                                 <div className="mb-3">
-                                    <p className="text-gray-700 font-medium mb-1">Gewählte Antwort:</p>
+                                    <p className="text-gray-700 font-medium mb-1">Antwort:</p>
                                     <p className={`text-sm px-3 py-1 rounded-lg inline-block ${attempt.is_correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                        {attempt.selected_answer}
+                                        {attempt.answer}
                                     </p>
                                 </div>
 
                                 <div className="grid md:grid-cols-3 gap-4">
                                     <div>
-                                        <p className="text-gray-700 font-medium mb-1">Begründung des
-                                            Schülers:</p>
+                                        <p className="text-gray-700 font-medium mb-1">Begründung:</p>
                                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                                             <p className="text-blue-800 text-sm italic">"{attempt.reasoning}"</p>
                                         </div>
@@ -1071,7 +1149,7 @@ const AdminAttempts: React.FC = () => {
 // Enhanced Admin Dashboard Component
 const AdminDashboard: React.FC = () => {
     const {user} = useAuth();
-    const [attempts, setAttempts] = useState<any[]>([]);
+    const [attempts, setAttempts] = useState<AttemptData[]>([]);
 
     useEffect(() => {
         // Load recent attempts for dashboard
@@ -1080,12 +1158,12 @@ const AdminDashboard: React.FC = () => {
     }, []);
 
     const stats = {
-        totalUsers: 3,
-        activeUsers: 2,
-        totalLevels: 3,
-        totalTasks: 6,
-        totalAttempts: JSON.parse(localStorage.getItem('demo_attempts') || '[]').length,
-        averageAIScore: attempts.length > 0 ? attempts.reduce((sum, attempt) => sum + (attempt.ai_quality_score || 0), 0) / attempts.length : 0
+        totalUsers: 0,
+        activeUsers: 0,
+        totalLevels: 0,
+        totalTasks: 0,
+        totalAttempts: 0,
+        averageAIScore: 0
     };
 
     return (<div className="space-y-8">
@@ -1214,10 +1292,10 @@ const AdminDashboard: React.FC = () => {
                             <p className="font-medium text-gray-800">{attempt.username}</p>
                             <p className="text-sm text-gray-600">{attempt.level_title}</p>
                         </div>
-                        {attempt.ai_quality_score && (<div className="flex items-center space-x-1">
+                        {attempt.ai_score && (<div className="flex items-center space-x-1">
                             <Brain className="h-3 w-3 text-purple-600"/>
                             <span className="text-xs text-purple-600 font-medium">
-                        KI: {attempt.ai_quality_score}/10
+                        KI: {attempt.ai_score}/10
                       </span>
                         </div>)}
                     </div>

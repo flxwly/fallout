@@ -10,7 +10,7 @@ export const GamePage: React.FC = () => {
   const { user } = useAuth();
 
   useEffect(() => {
-    loadLevels();
+    void loadLevels();
   }, []);
 
   if (loading) {
