@@ -7,6 +7,21 @@ import {AnimatePresence, motion} from 'framer-motion';
 import toast from 'react-hot-toast';
 import {supabase} from "../supabase/supabase.ts";
 
+type AIFeedback = {
+    feedback: string;
+    score: number;
+    suggestions: string[];
+}
+
+type TaskFeedback = {
+    isCorrect: boolean;
+    pointsAwarded: number;
+    doseReceived: number;
+    feedback: string,
+    aiFeedback: AIFeedback,
+    reasoning: string;
+}
+
 export const LevelPage: React.FC = () => {
     const {id} = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -28,7 +43,7 @@ export const LevelPage: React.FC = () => {
     const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
     const [answers, setAnswers] = useState<{ [key: string]: any }>({});
     const [reasoning, setReasoning] = useState<{ [key: string]: string }>({});
-    const [feedback, setFeedback] = useState<any>(null);
+    const [feedback, setFeedback] = useState<TaskFeedback | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [evaluatingReasoning, setEvaluatingReasoning] = useState(false);
 
@@ -46,6 +61,7 @@ export const LevelPage: React.FC = () => {
             await startLevel(levelId);
         } catch (error) {
             toast.error('Error while loading level...');
+            console.error(error);
             navigate('/game');
         } finally {
             setLoading(false);
@@ -66,25 +82,82 @@ export const LevelPage: React.FC = () => {
         selectedAnswer: string,
         studentReasoning: string,
         isCorrect: boolean
-    ) => {
+    ): Promise<AIFeedback> => {
 
         try {
-            return generateAIFeedback(studentReasoning, isCorrect, taskPrompt, selectedAnswer);
+            const feedback = await generateAIFeedback(studentReasoning, isCorrect, taskPrompt, selectedAnswer)
+            if (!feedback) throw 'Error while getting ai feedback';
+            console.log(feedback);
+            return feedback;
         } catch (error) {
-            console.log('Fallback to basic analysis:', error);
+            console.warn('Fallback to basic analysis:', error);
             return generateLocalDemoFeedback(studentReasoning, isCorrect, taskPrompt);
         } finally {
             setEvaluatingReasoning(false);
         }
     };
 
-    const generateAIFeedback = (
+    const generateAIFeedback = async (
         reasoning: string,
         isCorrect: boolean,
         taskPrompt: string,
         selectedAnswer: string
-    ) => {
-        throw "Not implemented";
+    ): Promise<AIFeedback | null> => {
+
+        const response = await fetch("http://localhost:11434/api/generate", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                model: "deepseek-r1:32b",
+                prompt: "Du bist ein hilfreicher Tutor für Quizfragen.\n" +
+                    "\n" +
+                    "Hier sind die Daten zu einer Frage:\n" +
+                    "- Frage: " + taskPrompt + "\n" +
+                    "- Antwort des Nutzers: " + selectedAnswer + "\n" +
+                    "- Begründung des Nutzers: " + reasoning + "\n" +
+                    "\n" +
+                    "Deine Aufgaben:\n" +
+                    "1. Bewerte die Antwort und erkläre in einfacher Sprache, ob und warum sie richtig oder falsch ist. \n" +
+                    "2. Gib konstruktives Feedback zur Begründung des Nutzers (was war gut, was könnte verbessert werden).\n" +
+                    "3. Gib eine Bewertung von 0 bis 10 Punkten, wobei 10 Punkte die perfekte Antwort sind.\n" +
+                    "4. Antworte bitte ausschließlich auf Deutsch, klar strukturiert und in kurzen Absätzen.\n" +
+                    "5. Achte auf fachliche Korrektheit. Eine Antwort, die falsch ist, sollte auch so dargestellt sein.\n" +
+                    "\n" +
+                    "Gib dein Feedback im folgenden JSON-Format zurück:\n" +
+                    "{\n" +
+                    "  \"evaluation\": [0-10],\n" +
+                    "  \"feedback\": \"detailliertes Feedback in Deutsch\",\n" +
+                    "  \"suggestions\": [\"Verbesserung 1\", \"Verbesserung 2]\", ...\n" +
+                    "}\n",
+                type: "json",
+                stream: false,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! ${response.status}`);
+        }
+
+        const data = await response.json();
+        const cleaned = data.response.replace(/<think>[\s\S]*?<\/think>/, "").trim();
+        const jsonMatch = cleaned.match(/```json([\s\S]*?)```/);
+        const jsonString = jsonMatch ? jsonMatch[1] : cleaned;
+
+        console.log(jsonString);
+
+        try {
+            const parsed = JSON.parse(jsonString);
+            return {
+                feedback: parsed.feedback,
+                score: parsed.score,
+                suggestions: parsed.verbesserungen
+            }
+        } catch (err) {
+            console.error("Failed to parse JSON:", err, { cleaned });
+            return null;
+        }
     }
 
     // Demo analysis based on length and keywords
@@ -93,7 +166,7 @@ export const LevelPage: React.FC = () => {
         reasoning: string,
         isCorrect: boolean,
         taskPrompt: string,
-    ) => {
+    ): AIFeedback => {
         const reasoningLength = reasoning.trim().length;
         const words = reasoning.trim().split(/\s+/).length;
         const sentences = reasoning.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
@@ -194,8 +267,8 @@ export const LevelPage: React.FC = () => {
         }
 
         return {
-            feedback,
-            qualityScore,
+            feedback: feedback,
+            score: qualityScore,
             suggestions: suggestions.slice(0, 3)
         };
     };
@@ -331,7 +404,7 @@ export const LevelPage: React.FC = () => {
 
                     ai_feedback: aiEvaluation.feedback,
                     ai_suggestions: aiEvaluation.suggestions,
-                    ai_score: aiEvaluation.qualityScore,
+                    ai_score: aiEvaluation.score,
 
                     timestamp: new Date().toISOString()
                 });
@@ -347,9 +420,7 @@ export const LevelPage: React.FC = () => {
                 feedback: isCorrect
                     ? 'Richtig! Du hast die korrekte Antwort gewählt.'
                     : 'Das ist nicht ganz richtig. Versuche es beim nächsten Mal besser!',
-                aiFeedback: aiEvaluation.feedback,
-                qualityScore: aiEvaluation.qualityScore,
-                suggestions: aiEvaluation.suggestions,
+                aiFeedback: aiEvaluation,
                 reasoning: userReasoning
             });
 
@@ -723,26 +794,26 @@ Beispiel: 'Ich wähle den Strahlenschutzanzug, weil er speziell entwickelt wurde
                                         <div className="flex items-center space-x-3 mb-2">
                                             <h4 className="font-semibold text-purple-800">🤖 KI-Bewertung deiner
                                                 Begründung:</h4>
-                                            {feedback.qualityScore && (
+                                            {feedback.aiFeedback.feedback && (
                                                 <div
-                                                    className={`px-3 py-1 rounded-full text-sm font-medium border ${getQualityColor(feedback.qualityScore)}`}>
-                                                    {feedback.qualityScore}/10 • {getQualityText(feedback.qualityScore)}
+                                                    className={`px-3 py-1 rounded-full text-sm font-medium border ${getQualityColor(feedback.aiFeedback.score)}`}>
+                                                    {feedback.aiFeedback.score}/10 • {getQualityText(feedback.aiFeedback.score)}
                                                 </div>
                                             )}
                                         </div>
-                                        <p className="text-purple-700 leading-relaxed">{feedback.aiFeedback}</p>
+                                        <p className="text-purple-700 leading-relaxed">{feedback.aiFeedback.feedback}</p>
                                     </div>
                                 </div>
 
                                 {/* AI Suggestions */}
-                                {feedback.suggestions && feedback.suggestions.length > 0 && (
+                                {feedback.aiFeedback.suggestions && feedback.aiFeedback.suggestions.length > 0 && (
                                     <div className="mt-4 p-4 bg-white/50 rounded-lg">
                                         <div className="flex items-center space-x-2 mb-2">
                                             <Lightbulb className="h-4 w-4 text-yellow-600"/>
                                             <h5 className="font-medium text-purple-800">Verbesserungsvorschläge:</h5>
                                         </div>
                                         <ul className="space-y-1">
-                                            {feedback.suggestions.map((suggestion: string, index: number) => (
+                                            {feedback.aiFeedback.suggestions.map((suggestion: string, index: number) => (
                                                 <li key={index}
                                                     className="text-sm text-purple-600 flex items-start space-x-2">
                                                     <span className="text-yellow-500 mt-1">•</span>
