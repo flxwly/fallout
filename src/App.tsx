@@ -16,6 +16,10 @@ import {ProtectedRoute} from './components/ProtectedRoute';
 function App() {
 
     return (
+        <div className="bg-gray-100">
+            <div className="bg-green-500 h-16">
+                <h1 className="text-center text-white text-3xl font-bold">Demo Version! (Aus praktischen )</h1>
+            </div>
             <AuthProvider>
                 <GameProvider>
                     <Router>
@@ -28,22 +32,26 @@ function App() {
                                     <Route path="/register" element={<RegisterPage/>}/>
                                     <Route
                                         path="/game"
-                                        element={<ProtectedRoute>
+                                        element={
+                                        <ProtectedRoute permissionLevel={0}>
                                             <GamePage/>
                                         </ProtectedRoute>}/>
                                     <Route
                                         path="/level/:id"
-                                        element={<ProtectedRoute>
+                                        element={
+                                        <ProtectedRoute permissionLevel={0}>
                                             <LevelPage/>
                                         </ProtectedRoute>}/>
                                     <Route
                                         path="/profile"
-                                        element={<ProtectedRoute>
+                                        element={
+                                        <ProtectedRoute permissionLevel={0}>
                                             <ProfilePage/>
                                         </ProtectedRoute>}/>
                                     <Route
                                         path="/admin/*"
-                                        element={<ProtectedRoute requireAdmin>
+                                        element={
+                                        <ProtectedRoute permissionLevel={1}>
                                             <AdminPage/>
                                         </ProtectedRoute>}/>
                                 </Routes>
@@ -53,6 +61,8 @@ function App() {
                     </Router>
                 </GameProvider>
             </AuthProvider>
+
+        </div>
     );
 }
 

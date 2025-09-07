@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Shield, Lock, User } from 'lucide-react';
 import toast from 'react-hot-toast';
+import {roles} from "../supabase/supabase.ts";
 
 export const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -10,8 +11,8 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { user, signIn } = useAuth();
 
-  if (user) {
-    return <Navigate to={user.role === 'ADMIN' ? '/admin' : '/game'} replace />;
+  if (user.profile && user.stats) {
+    return <Navigate to={roles.indexOf(user.profile?.permission_level || 'STUDENT') > 0 ? '/admin' : '/game'} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

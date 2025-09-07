@@ -2,6 +2,7 @@ import React from 'react';
 import {Link, useLocation} from 'react-router-dom';
 import {useAuth} from '../contexts/AuthContext';
 import {Home, LogOut, RadioIcon as Radiation, Settings, Skull, User} from 'lucide-react';
+import {roles} from "../supabase/supabase.ts";
 
 export const Navigation: React.FC = () => {
     const {user, signOut} = useAuth();
@@ -37,40 +38,42 @@ export const Navigation: React.FC = () => {
                             <span>Basis</span>
                         </Link>
 
-                        {user && user.role === 'STUDENT' && (<Link
-                                to="/game"
-                                className={`flex items-center space-x-1 px-3 py-2 rounded-md transition-colors ${isActive('/game') ? 'bg-red-600 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}
-                            >
-                                <Skull className="h-4 w-4"/>
-                                <span>Wasteland</span>
-                            </Link>)}
+                        {user.profile && roles.indexOf(user.profile.permission_level) <= 0 && (<Link
+                            to="/game"
+                            className={`flex items-center space-x-1 px-3 py-2 rounded-md transition-colors ${isActive('/game') ? 'bg-red-600 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}
+                        >
+                            <Skull className="h-4 w-4"/>
+                            <span>Wasteland</span>
+                        </Link>)}
 
-                        {user && user.role === 'ADMIN' && (<Link
-                                to="/admin"
-                                className={`flex items-center space-x-1 px-3 py-2 rounded-md transition-colors ${location.pathname.startsWith('/admin') ? 'bg-blue-600 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}
-                            >
-                                <Settings className="h-4 w-4"/>
-                                <span>Kommando</span>
-                            </Link>)}
+                        {user.profile && roles.indexOf(user.profile.permission_level) > 1 && (<Link
+                            to="/admin"
+                            className={`flex items-center space-x-1 px-3 py-2 rounded-md transition-colors ${location.pathname.startsWith('/admin') ? 'bg-blue-600 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}
+                        >
+                            <Settings className="h-4 w-4"/>
+                            <span>Kommando</span>
+                        </Link>)}
 
-                        {user ? (<div className="flex items-center space-x-4">
+                        {user.profile && user.stats ?
+                            (<div className="flex items-center space-x-4">
                                 <Link
                                     to="/profile"
                                     className={`flex items-center space-x-1 px-3 py-2 rounded-md transition-colors ${isActive('/profile') ? 'bg-red-600 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}
                                 >
                                     <User className="h-4 w-4"/>
-                                    <span>{user.username}</span>
+                                    <span>{user.profile.username}</span>
                                 </Link>
 
-                                {user.role === 'STUDENT' && (<div className="flex items-center space-x-4 text-sm">
+                                {roles.indexOf(user.profile.permission_level || 'STUDENT') <= 0 && (
+                                    <div className="flex items-center space-x-4 text-sm">
                                         <div
                                             className="flex items-center space-x-1 px-2 py-1 bg-green-600 rounded-full">
                                             <span
-                                                className="text-white font-semibold">🧠 {user.knowledge_points} WP</span>
+                                                className="text-white font-semibold">🧠 {user.stats.knowledge_points} WP</span>
                                         </div>
                                         <div className="flex items-center space-x-1 px-2 py-1 bg-red-600 rounded-full">
                       <span className="text-white font-semibold">
-                        {getHealthIcon(user.dose_msv)} {user.dose_msv.toFixed(1)} mSv
+                        {getHealthIcon(user.stats?.dose_msv || 0)} {user.stats?.dose_msv.toFixed(1)} mSv
                       </span>
                                         </div>
                                     </div>)}
@@ -82,7 +85,8 @@ export const Navigation: React.FC = () => {
                                     <LogOut className="h-4 w-4"/>
                                     <span>Verlassen</span>
                                 </button>
-                            </div>) : (<div className="flex items-center space-x-4">
+                            </div>) :
+                            (<div className="flex items-center space-x-4">
                                 <Link
                                     to="/login"
                                     className="px-4 py-2 text-gray-300 hover:text-white transition-colors"

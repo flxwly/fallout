@@ -1,5 +1,5 @@
 INSERT INTO public.levels (id, title, intro_text, topic_tag, ordering, is_active, created_at,
-                               updated_at)
+                           updated_at)
 VALUES ('demo-level-1', 'Die verstrahlten Ruinen - Der Klamottenladen', 'Du erwachst in den Trümmern einer einst blühenden Stadt. Überall siehst du seltsame Warnschilder mit dem Strahlensymbol. Die Luft flimmert merkwürdig, und dein Geigerzähler klickt bedrohlich.
 
 Auf der Ecke findest du einen halb-zerstörten Klamottenladen, in den du hineingehst. Ein alter Mann verkauft dort übrig gebliebene Kleidung und andere nützliche Dinge.
@@ -13,16 +13,16 @@ Doch Achtung: Zu viel Ausgaben direkt am Ende lassen euch wenig Geld für die we
 
 
 INSERT INTO public.tasks (id, level_id, type, prompt_text, ordering, is_active, created_at)
-VALUES ('demo-task-2', 'demo-level-1', 'free',
+VALUES ('demo-task-2', 'demo-level-1', 'FREE',
         'Ein alter Wissenschaftler fragt dich: "Warum sind manche Atomkerne instabil und zerfallen radioaktiv?" Erkläre ihm deine Überlegungen zum Verhältnis von Protonen zu Neutronen.',
         '2', 'true', '2025-08-26 20:35:19.566144+00'),
-       ('demo-task-shopping', 'demo-level-1', 'mc',
+       ('demo-task-shopping', 'demo-level-1', 'MC',
         'Du findest einen halb-zerstörten Klamottenladen, in den du hineingehst. Ein alter Mann verkauft dort übrig gebliebene Kleidung und andere nützliche Dinge. Du musst entscheiden, was du dort kaufen willst:',
         '1', 'true', '2025-08-26 20:34:51.32364+00');
 
-INSERT INTO public.options (id, task_id, option_text, points_awarded, dose_delta_msv, is_correct)
+INSERT INTO public.options (id, task_id, option_text, points_awarded, dose_delta_msv, correctness)
 VALUES ('demo-option-radiation-suit', 'demo-task-shopping',
-        'B) Gelber Strahlenschutzanzug (50€) - Professioneller Schutz vor radioaktiver Strahlung', '8', '0', 'true'),
+        'B) Gelber Strahlenschutzanzug (50€) - Professioneller Schutz vor radioaktiver Strahlung', '8', '0', '5'),
        ('demo-option-tshirt', 'demo-task-shopping', 'A) T-Shirt (0€) - Bietet keinen Schutz vor Strahlung', '2', '3',
-        'false');
+        '-1');
 

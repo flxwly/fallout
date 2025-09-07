@@ -25,7 +25,7 @@ import {
 import {motion} from 'framer-motion';
 import toast from 'react-hot-toast';
 import {useAuth} from '../contexts/AuthContext';
-import {supabase} from "../supabase/supabase.ts";
+import {supabase, type TaskType} from "../supabase/supabase.ts";
 
 type LevelData = {
     id: string,
@@ -38,11 +38,12 @@ type LevelData = {
 
 type TaskData = {
     id: string,
-    type: 'mc' | 'free',
+    type: TaskType,
     prompt_text: string,
     ordering: number,
     is_active: boolean,
     evaluation_criteria: string,
+    example_answer: string,
     options: OptionData[]
 }
 
@@ -52,7 +53,7 @@ type OptionData = {
     points_awarded: number,
     cost: number,
     dose_delta_msv: number,
-    is_correct: boolean
+    correctness: number
 }
 
 // Enhanced Level Editor Component
@@ -88,12 +89,13 @@ const LevelEditor: React.FC<{
     const handleAddTask = () => {
         const taskData: TaskData = {
             id: 'task-' + new Date().toISOString() + '-' + Math.floor(Math.random() * 256).toString(16),
-            type: 'mc',
+            type: 'MC',
             prompt_text: '',
             ordering: levelData.tasks.length + 1,
             is_active: true,
             options: [],
-            evaluation_criteria: ''
+            evaluation_criteria: '',
+            example_answer: ''
         }
         setCurrentTask(taskData);
         setShowTaskEditor(true);
@@ -224,8 +226,8 @@ const LevelEditor: React.FC<{
                                 <div className="flex items-center space-x-2 mb-2">
                                     <span className="text-sm font-medium text-gray-500">#{task.ordering}</span>
                                     <span
-                                        className={`px-2 py-1 rounded-full text-xs ${task.type === 'mc' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
-                      {task.type === 'mc' ? 'Multiple Choice' : 'Freitext'}
+                                        className={`px-2 py-1 rounded-full text-xs ${task.type === 'MC' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                      {task.type === 'MC' ? 'Multiple Choice' : 'Freitext'}
                     </span>
                                 </div>
                                 <p className="text-gray-800 mb-2">{task.prompt_text || 'Keine Aufgabenstellung'}</p>
@@ -285,11 +287,12 @@ const TaskEditor: React.FC<{
 
     const [taskData, setTaskData] = useState({
         id: task.id,
-        type: task.type || 'mc',
+        type: task.type || 'free',
         prompt_text: task.prompt_text || '',
         ordering: task.ordering || 1,
         is_active: task.is_active ?? true,
         evaluation_criteria: task.evaluation_criteria || '',
+        example_answer: task.example_answer || '',
         options: task.options || []
     });
 
@@ -298,7 +301,7 @@ const TaskEditor: React.FC<{
             toast.error('Aufgabenstellung ist erforderlich');
             return;
         }
-        if (taskData.type === 'mc' && taskData.options.length === 0) {
+        if (taskData.type === 'MC' && taskData.options.length === 0) {
             toast.error('Multiple Choice Aufgaben benötigen mindestens eine Antwortoption');
             return;
         }
@@ -312,7 +315,7 @@ const TaskEditor: React.FC<{
             points_awarded: 0,
             cost: 0,
             dose_delta_msv: 0,
-            is_correct: false
+            correctness: 0
         };
         setTaskData(prev => ({
             ...prev, options: [...prev.options, newOption]
@@ -348,7 +351,7 @@ const TaskEditor: React.FC<{
                 <select
                     value={taskData.type}
                     onChange={(e) => setTaskData(prev => ({
-                        ...prev, type: e.type as 'mc' | 'free'
+                        ...prev, type: e.type as TaskType
                     }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
@@ -407,7 +410,7 @@ const TaskEditor: React.FC<{
         </div>
 
         {/* Multiple Choice Options */}
-        {taskData.type === 'mc' && (<div className="border-t pt-6">
+        {taskData.type === 'MC' && (<div className="border-t pt-6">
             <div className="flex justify-between items-center mb-4">
                 <h4 className="text-lg font-medium text-gray-800">Antwortoptionen</h4>
                 <button
@@ -483,8 +486,8 @@ const TaskEditor: React.FC<{
                                 <label className="flex items-center">
                                     <input
                                         type="checkbox"
-                                        checked={option.is_correct}
-                                        onChange={(e) => handleUpdateOption(option.id, {is_correct: e.target.checked})}
+                                        checked={option.correctness > 0}
+                                        onChange={(e) => handleUpdateOption(option.id, {correctness: e.target.checked ? 1 : 0})}
                                         className="mr-2 text-green-600 focus:ring-green-500"
                                     />
                                     <span className="text-sm text-gray-700">Beste Antwort</span>
@@ -542,15 +545,18 @@ const AdminLevels: React.FC = () => {
         setTimeout(async () => {
             const {data, error} = await supabase
                 .from("levels")
-                .select("id, title, intro_text, ordering, is_active, tasks(id, type, prompt_text, ordering, is_active, evaluation_criteria, options(id, option_text, points_awarded, cost, dose_delta_msv, is_correct))")
+                .select(
+                    "id, title, intro_text, ordering, is_active, " +
+                    "tasks(id, type, prompt_text, ordering, is_active, evaluation_criteria, example_answer," +
+                    "options(id, option_text, points_awarded, cost, dose_delta_msv, correctness))"
+                )
 
             if (error) {
                 console.error("Error loading levels:", error);
                 toast.error('Fehler beim Laden der Level');
                 setLevels([]);
             } else {
-                const levelData: LevelData[] = data || [];
-                setLevels(levelData);
+                setLevels(data || []);
             }
 
             setLoading(false);
@@ -558,18 +564,23 @@ const AdminLevels: React.FC = () => {
     };
 
     const uploadLevels = async (levelData: LevelData) => {
-        // 1. Insert quiz
+
+        console.log("Uploading levels to db: ", levelData)
+
+        // TODO: Very not good hacky solution for database syncing...
+        //   Do it that way because of
+
         const { error: levelError } = await supabase
             .from("levels")
             .upsert({
-                id: levelData.id,
                 title: levelData.title,
                 intro_text: levelData.intro_text,
                 ordering: levelData.ordering,
                 is_active: levelData.is_active,
                 topic_tag: 'radoiactivity',
                 updated_at: new Date().toISOString(),
-            });
+            })
+            .eq("id", levelData.id)
         if (levelError) throw levelError;
 
         const taskData = levelData.tasks.map((taskData) => ({
@@ -579,14 +590,18 @@ const AdminLevels: React.FC = () => {
             prompt_text: taskData.prompt_text,
             ordering: taskData.ordering,
             is_active: taskData.is_active,
-            evaluation_criteria: taskData.evaluation_criteria
+            evaluation_criteria: taskData.evaluation_criteria,
+            example_answer: taskData.example_answer
         }))
         // 2. Insert questions
-        const {error: taskError} = await supabase
-            .from("tasks")
-            .upsert(taskData)
+        for (const task of taskData) {
+            const {error: taskError} = await supabase
+                .from("tasks")
+                .upsert(task)
+                .eq("id", task.id)
 
-        if (taskError) throw taskError;
+            if (taskError) throw taskError;
+        }
 
         const optionData = levelData.tasks.flatMap((task) =>
             task.options.map((option) => ({
@@ -596,7 +611,7 @@ const AdminLevels: React.FC = () => {
                 points_awarded: option.points_awarded,
                 cost: option.cost,
                 dose_delta_msv: option.dose_delta_msv,
-                is_correct: option.is_correct
+                correctness: option.correctness
             }))
         );
 
@@ -617,6 +632,9 @@ const AdminLevels: React.FC = () => {
 
         setLevels(prev => [...prev, level].sort((a, b) => a.ordering - b.ordering));
         setShowCreateForm(false);
+
+        await uploadLevels(levelData);
+
         toast.success('Level erfolgreich erstellt!');
     };
 
@@ -638,6 +656,13 @@ const AdminLevels: React.FC = () => {
             setLevels(prev => prev.filter(level => level.id !== levelId));
             toast.success('Level erfolgreich gelöscht!');
         }
+
+        const {error} = await supabase
+            .from("levels")
+            .delete()
+            .eq("id", levelId)
+
+        if (error) {console.error(error)}
     };
 
     if (editingLevel) {
@@ -766,20 +791,21 @@ type AttemptData = {
 
     level_title: string,
 
-    task_type: 'mc' | 'free',
+    task_type: TaskType,
     task_prompt: string,
 
     username: string,
     answer: string,
-    is_correct: boolean,
+    correctness: number,
     reasoning: string,
 
     points_got: number,
     dose_msv_got: number,
 
-    ai_feedback: string,
+    ai_summary: string,
     ai_score: number,
-    ai_suggestions: string[]
+    ai_good: string[],
+    ai_bad: string[]
 }
 
 const timeFormat = new Intl.DateTimeFormat('de-DE', {
@@ -810,7 +836,7 @@ const AdminAttempts: React.FC = () => {
                 "user_profiles( username )," +
                 "levels( title )," +
                 "tasks( type, prompt_text )," +
-                "options( points_awarded, dose_delta_msv, is_correct )"
+                "options( points_awarded, dose_delta_msv, correctness )"
             )
 
         if (error) {
@@ -827,15 +853,16 @@ const AdminAttempts: React.FC = () => {
 
                 username: attempt.user_profiles.username,
                 answer: attempt.answer,
-                is_correct: attempt.options?.is_correct ? attempt.options.is_correct : false,
+                correctness: attempt.correctness,
                 reasoning: attempt.reasoning,
 
                 points_got: attempt.points_got,
                 dose_msv_got: attempt.dose_msv_got,
 
-                ai_feedback: attempt.ai_feedback || "",
+                ai_summary: attempt.ai_summary || "",
                 ai_score: attempt.ai_score || 0.0,
-                ai_suggestions: attempt.ai_suggestions || [],
+                ai_good: attempt.ai_good || [],
+                ai_bad: attempt.ai_bad || []
             }))
             setAttempts(attemptsData)
         }
@@ -844,8 +871,8 @@ const AdminAttempts: React.FC = () => {
 
     const filteredAttempts = attempts.filter(attempt => {
         // Filter by correctness
-        if (filter === 'correct' && !attempt.is_correct) return false;
-        if (filter === 'incorrect' && attempt.is_correct) return false;
+        if (filter === 'correct' && attempt.correctness < 0) return false;
+        if (filter === 'incorrect' && attempt.correctness > 0) return false;
 
         // Filter by AI quality score
         if (qualityFilter === 'high' && (attempt.ai_score || 0) < 7) return false;
@@ -934,13 +961,13 @@ const AdminAttempts: React.FC = () => {
                     onClick={() => setFilter('correct')}
                     className={`px-4 py-2 rounded-lg transition-colors ${filter === 'correct' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                 >
-                    Richtig ({attempts.filter(a => a.is_correct).length})
+                    Richtig ({attempts.filter(a => a.correctness > 0).length})
                 </button>
                 <button
                     onClick={() => setFilter('incorrect')}
                     className={`px-4 py-2 rounded-lg transition-colors ${filter === 'incorrect' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                 >
-                    Falsch ({attempts.filter(a => !a.is_correct).length})
+                    Falsch ({attempts.filter(a => a.correctness < 0).length})
                 </button>
             </div>
 
@@ -984,7 +1011,7 @@ const AdminAttempts: React.FC = () => {
                             <div className="flex-1">
                                 <div className="flex items-center space-x-3 mb-2">
                                     <div
-                                        className={`w-3 h-3 rounded-full ${attempt.is_correct ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                        className={`w-3 h-3 rounded-full ${attempt.correctness >= 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>
                                     <h3 className="font-semibold text-gray-800">{attempt.username}</h3>
                                     <span className="text-sm text-gray-500">{attempt.level_title}</span>
                                     <div className="flex items-center space-x-1 text-xs text-gray-400">
@@ -1003,12 +1030,12 @@ const AdminAttempts: React.FC = () => {
 
                                 <div className="mb-3">
                                     <p className="text-gray-700 font-medium mb-1">Aufgabe:</p>
-                                    <p className="text-gray-600 text-sm">{attempt.task_prompt + "(" + attempt.task_type + ")"}</p>
+                                    <p className="text-gray-600 text-sm">{attempt.task_prompt + " (" + attempt.task_type + ")"}</p>
                                 </div>
 
                                 <div className="mb-3">
                                     <p className="text-gray-700 font-medium mb-1">Antwort:</p>
-                                    <p className={`text-sm px-3 py-1 rounded-lg inline-block ${attempt.is_correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                    <p className={`text-sm px-3 py-1 rounded-lg inline-block ${attempt.correctness >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                         {attempt.answer}
                                     </p>
                                 </div>
@@ -1027,16 +1054,16 @@ const AdminAttempts: React.FC = () => {
                                             <p className="text-gray-700 font-medium">KI-Feedback:</p>
                                         </div>
                                         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                                            <p className="text-purple-800 text-sm">{attempt.ai_feedback}</p>
+                                            <p className="text-purple-800 text-sm">{attempt.ai_summary}</p>
                                         </div>
                                     </div>
 
                                     <div>
                                         <p className="text-gray-700 font-medium mb-1">KI-Verbesserungsvorschläge:</p>
                                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                                            {attempt.ai_suggestions && attempt.ai_suggestions.length > 0 ? (
+                                            {Array.of(...attempt.ai_bad, ...attempt.ai_good).length > 0 ? (
                                                 <ul className="space-y-1">
-                                                    {attempt.ai_suggestions.map((suggestion: string, index: number) => (
+                                                    {Array.of(...attempt.ai_bad, ...attempt.ai_good).map((suggestion: string, index: number) => (
                                                         <li key={index}
                                                             className="text-yellow-800 text-xs flex items-start space-x-1">
                                                             <span className="text-yellow-600 mt-1">•</span>
@@ -1066,7 +1093,7 @@ const AdminAttempts: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {attempt.is_correct ? (
+                                {attempt.correctness >= 0 ? (
                                     <CheckCircle className="h-6 w-6 text-green-600 mx-auto"/>) : (
                                     <XCircle className="h-6 w-6 text-red-600 mx-auto"/>)}
                             </div>
@@ -1100,7 +1127,7 @@ const AdminAttempts: React.FC = () => {
                     <CheckCircle className="h-8 w-8 text-green-600"/>
                     <div>
                         <p className="text-2xl font-bold text-gray-800">
-                            {attempts.filter(a => a.is_correct).length}
+                            {attempts.filter(a => a.correctness > 0).length}
                         </p>
                         <p className="text-sm text-gray-600">Richtige Antworten</p>
                     </div>
@@ -1112,7 +1139,7 @@ const AdminAttempts: React.FC = () => {
                     <XCircle className="h-8 w-8 text-red-600"/>
                     <div>
                         <p className="text-2xl font-bold text-gray-800">
-                            {attempts.filter(a => !a.is_correct).length}
+                            {attempts.filter(a => a.correctness < 0).length}
                         </p>
                         <p className="text-sm text-gray-600">Falsche Antworten</p>
                     </div>
@@ -1136,7 +1163,7 @@ const AdminAttempts: React.FC = () => {
                     <TrendingUp className="h-8 w-8 text-yellow-600"/>
                     <div>
                         <p className="text-2xl font-bold text-gray-800">
-                            {attempts.length > 0 ? Math.round((attempts.filter(a => a.is_correct).length / attempts.length) * 100) : 0}%
+                            {attempts.length > 0 ? Math.round((attempts.filter(a => a.correctness > 0).length / attempts.length) * 100) : 0}%
                         </p>
                         <p className="text-sm text-gray-600">Erfolgsquote</p>
                     </div>
@@ -1169,7 +1196,7 @@ const AdminDashboard: React.FC = () => {
     return (<div className="space-y-8">
         <div>
             <h1 className="text-3xl font-bold text-gray-800 mb-2">Admin Dashboard</h1>
-            <p className="text-gray-600">Willkommen, {user?.username}! Übersicht über das KI-gestützte
+            <p className="text-gray-600">Willkommen, {user.profile?.username}! Übersicht über das KI-gestützte
                 Lernspiel-System</p>
         </div>
 
@@ -1287,7 +1314,7 @@ const AdminDashboard: React.FC = () => {
                                                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                     <div className="flex items-center space-x-3">
                         <div
-                            className={`w-3 h-3 rounded-full ${attempt.is_correct ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                            className={`w-3 h-3 rounded-full ${attempt.correctness > 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>
                         <div>
                             <p className="font-medium text-gray-800">{attempt.username}</p>
                             <p className="text-sm text-gray-600">{attempt.level_title}</p>

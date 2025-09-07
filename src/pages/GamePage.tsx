@@ -27,7 +27,7 @@ export const GamePage: React.FC = () => {
     return { icon: '💚', status: 'Gesund', color: 'text-green-600' };
   };
 
-  const healthStatus = getHealthStatus(user?.dose_msv || 0);
+  const healthStatus = getHealthStatus(user?.stats?.dose_msv || 0);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -42,7 +42,7 @@ export const GamePage: React.FC = () => {
           Willkommen in der <span className="text-red-600">Wasteland</span>
         </h1>
         <p className="text-gray-600 max-w-2xl mx-auto">
-          Du bist erwacht, {user?.username}! Die Stadt liegt in Trümmern, überall kleben komische Aufkleber. 
+          Du bist erwacht, {user?.profile?.username}! Die Stadt liegt in Trümmern, überall kleben komische Aufkleber.
           Es gab einen radioaktiven Unfall. Sammle Wissen, achte auf deine Gesundheit und überlebe!
         </p>
       </div>
@@ -59,7 +59,7 @@ export const GamePage: React.FC = () => {
             <Trophy className="h-8 w-8 text-green-600" />
             <div>
               <p className="text-2xl font-bold text-gray-800">
-                {user?.knowledge_points || 0}
+                {user?.stats?.knowledge_points || 0}
               </p>
               <p className="text-sm text-gray-600">Wissenspunkte</p>
             </div>
@@ -91,8 +91,8 @@ export const GamePage: React.FC = () => {
 
         <motion.div 
           className={`bg-white rounded-lg p-6 shadow-lg border-l-4 ${
-            (user?.dose_msv || 0) > 5 ? 'border-red-500' : 
-            (user?.dose_msv || 0) > 2 ? 'border-yellow-500' : 'border-green-500'
+            (user?.stats?.dose_msv || 0) > 5 ? 'border-red-500' : 
+            (user?.stats?.dose_msv || 0) > 2 ? 'border-yellow-500' : 'border-green-500'
           }`}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -100,12 +100,12 @@ export const GamePage: React.FC = () => {
         >
           <div className="flex items-center space-x-3">
             <Radiation className={`h-8 w-8 ${
-              (user?.dose_msv || 0) > 5 ? 'text-red-600' : 
-              (user?.dose_msv || 0) > 2 ? 'text-yellow-600' : 'text-green-600'
+              (user?.stats?.dose_msv || 0) > 5 ? 'text-red-600' : 
+              (user?.stats?.dose_msv || 0) > 2 ? 'text-yellow-600' : 'text-green-600'
             }`} />
             <div>
               <p className="text-2xl font-bold text-gray-800">
-                {(user?.dose_msv || 0).toFixed(1)}
+                {(user?.stats?.dose_msv || 0).toFixed(1)}
               </p>
               <p className="text-sm text-gray-600">mSv Strahlung</p>
             </div>
@@ -142,19 +142,19 @@ export const GamePage: React.FC = () => {
       </div>
 
       {/* Health Warning */}
-      {user && user.dose_msv > 2 && (
+      {user?.stats && user.stats.dose_msv > 2 && (
         <motion.div 
           className={`p-4 rounded-lg border-2 ${
-            user.dose_msv > 5 ? 'bg-red-50 border-red-300' : 'bg-yellow-50 border-yellow-300'
+            user.stats.dose_msv > 5 ? 'bg-red-50 border-red-300' : 'bg-yellow-50 border-yellow-300'
           }`}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.5 }}
         >
           <div className="flex items-center space-x-3">
-            <Skull className={`h-6 w-6 ${user.dose_msv > 5 ? 'text-red-600' : 'text-yellow-600'}`} />
-            <p className={`font-medium ${user.dose_msv > 5 ? 'text-red-800' : 'text-yellow-800'}`}>
-              {user.dose_msv > 5 
+            <Skull className={`h-6 w-6 ${user.stats.dose_msv > 5 ? 'text-red-600' : 'text-yellow-600'}`} />
+            <p className={`font-medium ${user.stats.dose_msv > 5 ? 'text-red-800' : 'text-yellow-800'}`}>
+              {user.stats.dose_msv > 5
                 ? '💀 KRITISCH! Deine Strahlendosis ist lebensgefährlich! Du musst sofort bessere Entscheidungen treffen!'
                 : '🤒 WARNUNG! Du wirst krank durch die Strahlung. Achte besser auf deine Antworten!'
               }

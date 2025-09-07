@@ -4,28 +4,45 @@ import {useGame} from '../contexts/GameContext';
 import {useAuth} from '../contexts/AuthContext';
 import {AlertTriangle, ArrowLeft, Brain, CheckCircle, Lightbulb, Send, XCircle} from 'lucide-react';
 import {AnimatePresence, motion} from 'framer-motion';
+import { Mistral } from '@mistralai/mistralai';
 import toast from 'react-hot-toast';
 import {supabase} from "../supabase/supabase.ts";
 
 type AIFeedback = {
-    feedback: string;
     score: number;
-    suggestions: string[];
+    summary: string;
+    good: string[];
+    bad: string[];
+}
+
+type MultipleChoiceAnswer = {
+    taskPrompt: string,
+    possibleOptions: string[],
+    bestOption: string,
+    selectedAnswer: string,
+    reasoning: string,
+    exampleReasoning: string
+}
+
+type FreeTextAnswer = {
+    taskPrompt: string,
+    exampleAnswer: string,
+    answer: string,
 }
 
 type TaskFeedback = {
-    isCorrect: boolean;
+    correctness: number;
     pointsAwarded: number;
     doseReceived: number;
     feedback: string,
-    aiFeedback: AIFeedback,
+    aiFeedback: AIFeedback | null,
     reasoning: string;
 }
 
 export const LevelPage: React.FC = () => {
     const {id} = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const {user, updateUser} = useAuth();
+    const {user, updateProfile, updateStats} = useAuth();
     const {
         loadLevel,
         loadTasks,
@@ -49,7 +66,7 @@ export const LevelPage: React.FC = () => {
 
     useEffect(() => {
         if (id) {
-            loadLevelData(id);
+            void loadLevelData(id);
         }
     }, [id]);
 
@@ -78,31 +95,135 @@ export const LevelPage: React.FC = () => {
 
     // Enhanced AI evaluation with comprehensive fallback system
     const evaluateReasoningWithAI = async (
-        taskPrompt: string,
-        selectedAnswer: string,
-        studentReasoning: string,
-        isCorrect: boolean
-    ): Promise<AIFeedback> => {
+        levelText: string,
+        freeTextAnswer: FreeTextAnswer | undefined,
+        multipleChoiceAnswer: MultipleChoiceAnswer | undefined,
+        evaluationCriteria: string
+    ): Promise<AIFeedback | null> => {
 
+        let feedback: AIFeedback | null = null
         try {
-            const feedback = await generateAIFeedback(studentReasoning, isCorrect, taskPrompt, selectedAnswer)
-            if (!feedback) throw 'Error while getting ai feedback';
-            console.log(feedback);
-            return feedback;
+            feedback = await generateAIFeedback(levelText, freeTextAnswer, multipleChoiceAnswer, evaluationCriteria);
         } catch (error) {
-            console.warn('Fallback to basic analysis:', error);
-            return generateLocalDemoFeedback(studentReasoning, isCorrect, taskPrompt);
-        } finally {
-            setEvaluatingReasoning(false);
+            console.warn("Couldn't get AI feedback.", error);
         }
+        setEvaluatingReasoning(false);
+        return feedback
     };
 
-    const generateAIFeedback = async (
-        reasoning: string,
-        isCorrect: boolean,
+    const generateAIPromptForMC = (
         taskPrompt: string,
-        selectedAnswer: string
+        possibleAnswers: string[],
+        selectedAnswer: string,
+        bestAnswer: string,
+        reasoning: string,
+        exampleReasoning: string,
+        aiEvaluationCriteria: string
+    ): string => {
+        return "### KONTEXT ###\n" +
+            "Frage: " + taskPrompt + "\n" +
+            "Antwortmöglichkeiten:\n" + possibleAnswers.join("\n") + "\n" +
+            "Beste Antwort: " + bestAnswer + "\n" +
+            "Beispielbegründung: " + exampleReasoning + "\n" +
+            "\n" +
+            "### ABGABE DES SCHÜLERS ###\n" +
+            "Antwort des Schülers: " + selectedAnswer + "\n" +
+            "Begründung des Schülers: " + reasoning + "\n" +
+            "\n" +
+            "### BEWERTUNGSKRITERIEN ###\n" +
+            aiEvaluationCriteria +
+            "\n" +
+            "### DEINE AUFGABE ###\n" +
+            "1.  Analysiere die Abgabe des Schülers under den Bewertungskriterien\n" +
+            "2.  Zeige richtige Konzepte auf, die der Schüler benannt oder auf die er hingewiesen hat.\n" +
+            "3.  Korrigiere Missverständnisse und weise dabei auf die relevanten Konzepte hin.\n" +
+            "4.  Das Feedback soll konstruktiv sein, ermutigen weiter zu lernen und direkt an den Schüler gerichtet sein. Sprich ihn mit \"du\" an.\n" +
+            "5.  Gebe außerdem einen Score von 0 bis 10, wobei eine perfekte Antwort 10 Punkte erhält und eine komplett falsche Antwort 0 Punkte.\n" +
+            "\n" +
+            "### RÜCKGABEN FORMAT ###\n" +
+            "Gib deine Antwort in einem JSON Objekt nach folgender Form und ausschließlich auf Deutsch zurück:\n" +
+            "{\n" +
+            "  \"score\": integer,\n" +
+            "  \"summary\": \"string\",\n" +
+            "  \"gutes\": [\n" +
+            "    \"string 1\", ...\n" +
+            "  ],\n" +
+            "  \"verbesserungsbedarf\": [\n" +
+            "    \"string 1\", ...\n" +
+            "  ]\n" +
+            "}"
+    }
+
+    const generateAIPromptForFreeText = (
+        taskPrompt: string,
+        givenAnswer: string,
+        exampleAnswer: string,
+        aiEvaluationCriteria: string
+    ): string => {
+        return "### KONTEXT ###\n" +
+            "Frage: " + taskPrompt + "\n" +
+            "Beispiel Antwort: " + exampleAnswer + "\n" +
+            "\n" +
+            "### ABGABE DES SCHÜLERS ###\n" +
+            "Antwort des Schülers: " + givenAnswer + "\n" +
+            "\n" +
+            "### BEWERTUNGSKRITERIEN ###\n" +
+            aiEvaluationCriteria +
+            "\n" +
+            "### DEINE AUFGABE ###\n" +
+            "1.  Analysiere die Abgabe des Schülers under den Bewertungskriterien.\n" +
+            "2.  Zeige richtige Konzepte auf, die der Schüler benannt oder auf die er hingewiesen hat.\n" +
+            "3.  Korrigiere Missverständnisse und weise dabei auf die relevanten Konzepte hin.\n" +
+            "4.  Das Feedback soll konstruktiv sein, ermutigen weiter zu lernen und direkt an den Schüler gerichtet sein. Sprich ihn mit \"du\" an.\n" +
+            "5.  Gebe außerdem einen Score von 0 bis 10, wobei eine perfekte Antwort 10 Punkte erhält und eine komplett falsche Antwort 0 Punkte.\n" +
+            "\n" +
+            "### RÜCKGABEN FORMAT ###\n" +
+            "Gib deine Antwort in einem JSON Objekt nach folgender Form und ausschließlich auf Deutsch zurück:\n" +
+            "{\n" +
+            "  \"score\": integer,\n" +
+            "  \"summary\": \"string\",\n" +
+            "  \"gutes\": [\n" +
+            "    \"string 1\", ...\n" +
+            "  ],\n" +
+            "  \"verbesserungsbedarf\": [\n" +
+            "    \"string 1\", ...\n" +
+            "  ]\n" +
+            "}"
+    }
+
+    const generateAIFeedback = async (
+        levelText: string,
+        freeTextAnswer: FreeTextAnswer | undefined,
+        multipleChoiceAnswer: MultipleChoiceAnswer | undefined,
+        evaluationCriteria: string
     ): Promise<AIFeedback | null> => {
+
+        const aiPrompt = freeTextAnswer ? generateAIPromptForFreeText(
+            freeTextAnswer.taskPrompt,
+            freeTextAnswer.answer,
+            freeTextAnswer.exampleAnswer,
+            evaluationCriteria
+        ) : multipleChoiceAnswer ? generateAIPromptForMC(
+            multipleChoiceAnswer.taskPrompt,
+            multipleChoiceAnswer.possibleOptions,
+            multipleChoiceAnswer.selectedAnswer,
+            multipleChoiceAnswer.bestOption,
+            multipleChoiceAnswer.reasoning,
+            multipleChoiceAnswer.exampleReasoning,
+            evaluationCriteria
+        ) : undefined
+        if (!aiPrompt) throw "Exactly one answer must be provided"
+
+        /*console.log("A")
+        const mistralClient = new Mistral({apiKey: import.meta.env.MISTRAL_API_KEY});
+
+        const response = await mistralClient.chat.complete({
+            model: 'mistral-large-latest',
+            messages: [{role: 'user', content: levelText + "\n" + aiPrompt}],
+        })
+        console.log("C")
+
+        console.log("Antwort:", response)*/
 
         const response = await fetch("http://localhost:11434/api/generate", {
             method: "POST",
@@ -110,27 +231,8 @@ export const LevelPage: React.FC = () => {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                model: "deepseek-r1:32b",
-                prompt: "Du bist ein hilfreicher Tutor für Quizfragen.\n" +
-                    "\n" +
-                    "Hier sind die Daten zu einer Frage:\n" +
-                    "- Frage: " + taskPrompt + "\n" +
-                    "- Antwort des Nutzers: " + selectedAnswer + "\n" +
-                    "- Begründung des Nutzers: " + reasoning + "\n" +
-                    "\n" +
-                    "Deine Aufgaben:\n" +
-                    "1. Bewerte die Antwort und erkläre in einfacher Sprache, ob und warum sie richtig oder falsch ist. \n" +
-                    "2. Gib konstruktives Feedback zur Begründung des Nutzers (was war gut, was könnte verbessert werden).\n" +
-                    "3. Gib eine Bewertung von 0 bis 10 Punkten, wobei 10 Punkte die perfekte Antwort sind.\n" +
-                    "4. Antworte bitte ausschließlich auf Deutsch, klar strukturiert und in kurzen Absätzen.\n" +
-                    "5. Achte auf fachliche Korrektheit. Eine Antwort, die falsch ist, sollte auch so dargestellt sein.\n" +
-                    "\n" +
-                    "Gib dein Feedback im folgenden JSON-Format zurück:\n" +
-                    "{\n" +
-                    "  \"evaluation\": [0-10],\n" +
-                    "  \"feedback\": \"detailliertes Feedback in Deutsch\",\n" +
-                    "  \"suggestions\": [\"Verbesserung 1\", \"Verbesserung 2]\", ...\n" +
-                    "}\n",
+                model: "deepseek-r1:8b",
+                prompt: levelText + "\n" + aiPrompt,
                 type: "json",
                 stream: false,
             }),
@@ -145,192 +247,24 @@ export const LevelPage: React.FC = () => {
         const jsonMatch = cleaned.match(/```json([\s\S]*?)```/);
         const jsonString = jsonMatch ? jsonMatch[1] : cleaned;
 
-        console.log(jsonString);
-
         try {
             const parsed = JSON.parse(jsonString);
             return {
-                feedback: parsed.feedback,
                 score: parsed.score,
-                suggestions: parsed.verbesserungen
+                summary: parsed.summary,
+                good: parsed.gutes,
+                bad: parsed.verbesserungsbedarf
             }
         } catch (err) {
-            console.error("Failed to parse JSON:", err, { cleaned });
-            return null;
+            console.error("Failed to parse JSON:", err, {cleaned});
+            return {
+                score: 0,
+                summary: "Es konnte kein KI Feedback generiert werden.",
+                good: [],
+                bad: []
+            };
         }
     }
-
-    // Demo analysis based on length and keywords
-    // Not AI. TODO: maybe add notice that no AI was used and this feedback is easily deceived.
-    const generateLocalDemoFeedback = (
-        reasoning: string,
-        isCorrect: boolean,
-        taskPrompt: string,
-    ): AIFeedback => {
-        const reasoningLength = reasoning.trim().length;
-        const words = reasoning.trim().split(/\s+/).length;
-        const sentences = reasoning.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
-
-        // Advanced keyword analysis
-        const scientificTerms = {
-            basic: ['radioaktiv', 'strahlung', 'zerfall', 'atom', 'kern'],
-            intermediate: ['isotop', 'halbwertszeit', 'alpha', 'beta', 'gamma', 'dosimeter', 'millisievert', 'msv'],
-            advanced: ['ionisierend', 'abschirmung', 'absorption', 'streuung', 'aktivität', 'becquerel', 'gray', 'sievert'],
-            protection: ['schutz', 'abstand', 'zeit', 'abschirmung', 'dosis', 'grenzwert', 'sicherheit'],
-            physics: ['energie', 'teilchen', 'elektron', 'neutron', 'proton', 'photon', 'wellenlänge', 'frequenz']
-        };
-
-        let termScore = 0;
-        let usedCategories = 0;
-
-        Object.entries(scientificTerms).forEach(([category, terms]) => {
-            const categoryTerms = terms.filter(term =>
-                reasoning.toLowerCase().includes(term)
-            );
-            if (categoryTerms.length > 0) {
-                usedCategories++;
-                termScore += categoryTerms.length * (category === 'advanced' ? 3 : category === 'intermediate' ? 2 : 1);
-            }
-        });
-
-        // Linguistic analysis
-        const hasExplanation = /\b(weil|da|deshalb|daher|denn|aufgrund|durch|wegen)\b/i.test(reasoning);
-        const hasComparison = /\b(besser|schlechter|mehr|weniger|höher|niedriger|größer|kleiner)\b/i.test(reasoning);
-        const hasConclusion = /\b(darum|folglich|somit|also|deshalb|deswegen)\b/i.test(reasoning);
-        const hasQuantification = /\b(\d+\s*(msv|sv|gy|bq|prozent|%|grad|meter|sekunden?))\b/i.test(reasoning);
-        const hasNegation = /\b(nicht|kein|ohne|niemals|nie)\b/i.test(reasoning);
-
-        // Context analysis based on task content
-        const isShoppingTask = taskPrompt.toLowerCase().includes('klamottenladen') || taskPrompt.toLowerCase().includes('kaufen');
-        const isDosimetryTask = taskPrompt.toLowerCase().includes('dosimeter') || taskPrompt.toLowerCase().includes('dosis');
-        const isMedicalTask = taskPrompt.toLowerCase().includes('medizin') || taskPrompt.toLowerCase().includes('krankenhaus');
-
-        // Calculate sophisticated quality score
-        let qualityScore = 3; // Base score
-
-        // Length and structure bonus
-        if (reasoningLength >= 100) qualityScore += 2;
-        else if (reasoningLength >= 50) qualityScore += 1;
-
-        if (sentences >= 3) qualityScore += 1;
-        if (words >= 20) qualityScore += 1;
-
-        // Scientific terminology bonus
-        qualityScore += Math.min(3, Math.floor(termScore / 2));
-        if (usedCategories >= 3) qualityScore += 1;
-
-        // Linguistic sophistication bonus
-        if (hasExplanation) qualityScore += 1;
-        if (hasComparison) qualityScore += 1;
-        if (hasConclusion) qualityScore += 1;
-        if (hasQuantification) qualityScore += 1;
-
-        // Context appropriateness bonus
-        if (isShoppingTask && reasoning.toLowerCase().includes('schutz')) qualityScore += 1;
-        if (isDosimetryTask && reasoning.toLowerCase().includes('msv')) qualityScore += 1;
-        if (isMedicalTask && reasoning.toLowerCase().includes('therapie')) qualityScore += 1;
-
-        // Correctness bonus/penalty
-        if (isCorrect) qualityScore += 2;
-        else qualityScore -= 1;
-
-        // Ensure score is within bounds
-        qualityScore = Math.min(10, Math.max(1, qualityScore));
-
-        // Generate contextual feedback
-        let feedback = '';
-        let suggestions: string[] = [];
-
-        if (qualityScore <= 3) {
-            feedback = generateLowQualityFeedback(reasoning, isCorrect, termScore, hasExplanation);
-            suggestions = [
-                "Schreibe mindestens 3-4 vollständige Sätze",
-                "Verwende Fachbegriffe wie 'Radioaktivität', 'Strahlung', 'Dosis'",
-                "Erkläre die physikalischen Zusammenhänge",
-                "Begründe deine Entscheidung Schritt für Schritt"
-            ];
-        } else if (qualityScore <= 6) {
-            feedback = generateMediumQualityFeedback(reasoning, isCorrect, termScore, hasExplanation, usedCategories);
-            suggestions = [
-                termScore < 3 ? "Verwende mehr physikalische Fachbegriffe" : "Gute Verwendung von Fachbegriffen!",
-                !hasExplanation ? "Erkläre deine Überlegungen mit 'weil', 'da', 'deshalb'" : "Gute Erklärungsstruktur!",
-                isCorrect ? "Vertiefe dein Wissen mit weiteren Details" : "Überprüfe die physikalischen Grundlagen",
-                !hasQuantification ? "Verwende konkrete Zahlen und Einheiten (mSv, etc.)" : "Gut, dass du Zahlen verwendest!"
-            ];
-        } else {
-            feedback = generateHighQualityFeedback(reasoning, isCorrect, termScore, usedCategories, hasExplanation, hasComparison);
-            suggestions = [
-                isCorrect ? "Exzellente Argumentation! Weiter so!" : "Sehr gute Begründung, aber überprüfe das Ergebnis",
-                qualityScore >= 9 ? "Du argumentierst auf Expertenniveau!" : "Du könntest noch mehr Details erklären",
-                usedCategories >= 3 ? "Hervorragende Fachsprachenkompetenz!" : "Versuche noch vielfältigere Fachbegriffe zu verwenden"
-            ];
-        }
-
-        return {
-            feedback: feedback,
-            score: qualityScore,
-            suggestions: suggestions.slice(0, 3)
-        };
-    };
-
-    const generateLowQualityFeedback = (reasoning: string, _isCorrect: boolean, termScore: number, hasExplanation: boolean) => {
-        if (reasoning.length < 20) {
-            return "Deine Begründung ist viel zu kurz! Ein Wissenschaftler muss seine Gedanken ausführlich erklären. Schreibe mindestens 3-4 Sätze und erkläre, warum du diese Antwort gewählt hast.";
-        }
-
-        if (termScore === 0) {
-            return "Du verwendest keine Fachbegriffe! In der Physik ist präzise Sprache wichtig. Verwende Begriffe wie 'Radioaktivität', 'Strahlung', 'Dosis', 'Zerfall' oder 'Schutz'.";
-        }
-
-        if (!hasExplanation) {
-            return "Du beschreibst nur, was du machst, aber nicht WARUM. Verwende Wörter wie 'weil', 'da', 'deshalb' um deine Überlegungen zu erklären.";
-        }
-
-        return "Deine Begründung ist noch sehr oberflächlich. Erkläre die physikalischen Zusammenhänge genauer und verwende mehr Fachbegriffe.";
-    };
-
-    const generateMediumQualityFeedback = (_reasoning: string, isCorrect: boolean, termScore: number, hasExplanation: boolean, usedCategories: number) => {
-        let feedback = '';
-
-        if (isCorrect) {
-            feedback = "Gute Antwort! Du zeigst solides Grundverständnis. ";
-            if (termScore >= 3) feedback += "Deine Verwendung von Fachbegriffen ist angemessen. ";
-            if (hasExplanation) feedback += "Deine Erklärung ist nachvollziehbar. ";
-            feedback += "Mit etwas mehr Detail könntest du noch überzeugender argumentieren.";
-        } else {
-            feedback = "Deine Begründung ist gut strukturiert, aber die Antwort ist nicht korrekt. ";
-            if (termScore >= 2) feedback += "Du kennst die Fachbegriffe, ";
-            feedback += "aber überdenke die physikalischen Grundlagen noch einmal. ";
-            if (hasExplanation) feedback += "Deine Denkweise ist nachvollziehbar, führt aber zum falschen Ergebnis.";
-        }
-
-        if (usedCategories >= 2) {
-            feedback += " Du zeigst bereits gute Fachkompetenz!";
-        }
-
-        return feedback;
-    };
-
-    const generateHighQualityFeedback = (_reasoning: string, isCorrect: boolean, termScore: number, usedCategories: number, hasExplanation: boolean, hasComparison: boolean) => {
-        let feedback = '';
-
-        if (isCorrect) {
-            feedback = "Ausgezeichnete Begründung! Du argumentierst wie ein echter Wissenschaftler. ";
-            if (termScore >= 5) feedback += "Deine Fachsprachenkompetenz ist beeindruckend. ";
-            if (hasExplanation) feedback += "Deine logische Argumentation ist vorbildlich. ";
-            if (hasComparison) feedback += "Du kannst verschiedene Optionen hervorragend gegeneinander abwägen. ";
-            if (usedCategories >= 3) feedback += "Du beherrschst verschiedene Fachbereiche der Physik. ";
-            feedback += "So macht wissenschaftliches Arbeiten richtig Spaß!";
-        } else {
-            feedback = "Deine Begründung ist von sehr hoher Qualität und zeigt tiefes wissenschaftliches Verständnis. ";
-            if (termScore >= 4) feedback += "Du beherrschst die Fachsprache exzellent. ";
-            feedback += "Leider ist die gewählte Antwort nicht korrekt. ";
-            if (hasExplanation) feedback += "Deine Argumentation ist logisch aufgebaut, aber überprüfe die physikalischen Grundlagen noch einmal. ";
-            feedback += "Mit deinen analytischen Fähigkeiten wirst du den Fehler sicher finden!";
-        }
-
-        return feedback;
-    };
 
     const handleAnswerSubmit = async () => {
         if (!tasks || !tasks[currentTaskIndex]) return;
@@ -338,6 +272,7 @@ export const LevelPage: React.FC = () => {
         const task = tasks[currentTaskIndex];
         const answer = answers[task.id];
         const userReasoning = reasoning[task.id];
+        const optionsByCorrectness = options.sort((optA) => optA.correctness)
 
 
         if (!currentLevel) {
@@ -345,7 +280,7 @@ export const LevelPage: React.FC = () => {
             return;
         }
 
-        if (!user) {
+        if (!user.profile || !user.stats) {
             toast.error('Kein Nutzer angemeldet');
             return;
         }
@@ -355,7 +290,7 @@ export const LevelPage: React.FC = () => {
             return;
         }
 
-        if (!userReasoning || userReasoning.trim().length < 10) {
+        if (currentTask.type === 'MC' && (!userReasoning || userReasoning.trim().length < 10)) {
             toast.error('Bitte begründe deine Antwort ausführlich (mindestens 10 Zeichen)');
             return;
         }
@@ -363,61 +298,88 @@ export const LevelPage: React.FC = () => {
         try {
             setSubmitting(true);
 
-            // TODO: Make isCorrect optional for free text answers.
-            //  In that case let the AI decide if the answer is correct.
-            //  Also reward points based on qualityScore.
+            const freeTextAnswer: FreeTextAnswer | undefined = task.type === "FREE" ? {
+                taskPrompt: task.prompt_text,
+                exampleAnswer: task.example_answer,
+                answer: answer
+            } : undefined
+
             const selectedOption = options.find(opt => opt.id === answer);
-            const isCorrect = selectedOption?.is_correct || false;
+
+            const multipleChoiceAnswer: MultipleChoiceAnswer | undefined = task.type === "MC" ? {
+                taskPrompt: task.prompt_text,
+                possibleOptions: options.map((opt) => opt.option_text),
+                bestOption: optionsByCorrectness[0].option_text,
+                selectedAnswer: selectedOption?.option_text || '',
+                reasoning: userReasoning,
+                exampleReasoning: task.example_answer
+            } : undefined
+
             const pointsAwarded = selectedOption?.points_awarded || 0;
             const doseReceived = selectedOption?.dose_delta_msv || 0;
 
             // Get AI feedback for the reasoning
+
+            const szenario = "Du bist ein freundlicher Physiklehrer der Feedback gibt.\n" +
+                "### SZENARIO ###\n" +
+                currentLevel.intro_text + "\n"
+
             const aiEvaluation = await evaluateReasoningWithAI(
-                task.prompt_text,
-                selectedOption?.option_text || answer,
-                userReasoning,
-                isCorrect
+                szenario, freeTextAnswer, multipleChoiceAnswer, task.evaluation_criteria
             );
 
-            // Update demo user stats
-            if (user && updateUser) {
-                updateUser({
-                    knowledge_points: user.knowledge_points + pointsAwarded,
-                    dose_msv: user.dose_msv + doseReceived
-                });
-            }
+            console.log(aiEvaluation)
+
+            // TODO: Update user stats
 
             const {error} = await supabase
                 .from("attempts")
                 .insert({
-                    user_id: user.id,
+                    user_id: user.profile?.user_id,
                     level_id: currentLevel.id,
                     task_id: task.id,
                     option_id: selectedOption?.id || null,
 
                     answer: selectedOption?.option_text || answer,
                     reasoning: userReasoning,
+                    correctness: selectedOption?.correctness || 0,
 
-                    is_correct: isCorrect,
                     points_got: pointsAwarded,
                     dose_msv_got: doseReceived,
 
-                    ai_feedback: aiEvaluation.feedback,
-                    ai_suggestions: aiEvaluation.suggestions,
-                    ai_score: aiEvaluation.score,
+                    ai_score: aiEvaluation?.score,
+                    ai_summary: aiEvaluation?.summary,
+                    ai_good: aiEvaluation?.good,
+                    ai_bad: aiEvaluation?.bad,
 
                     timestamp: new Date().toISOString()
                 });
+
+            const userStats = await supabase
+                .from("user_stats")
+                .select("*")
+                .eq("user_id", user.profile.user_id)
+                .single();
+
+            await supabase
+                .from("user_stats")
+                .update({
+                    dose_msv: userStats.data.dose_msv + doseReceived,
+                    knowledge_points: userStats.data.knowledge_points + pointsAwarded
+                })
+                .eq("user_id", user.profile.user_id);
 
             if (error) {
                 console.error("Couldn't upload attempt data to Database", error);
             }
 
+            updateStats({knowledge_points: user.stats.knowledge_points + pointsAwarded, dose_msv: user.stats.dose_msv + doseReceived})
+
             setFeedback({
-                isCorrect,
+                correctness: aiEvaluation?.score || 0,
                 pointsAwarded,
                 doseReceived,
-                feedback: isCorrect
+                feedback: aiEvaluation?.score || 0 > 0
                     ? 'Richtig! Du hast die korrekte Antwort gewählt.'
                     : 'Das ist nicht ganz richtig. Versuche es beim nächsten Mal besser!',
                 aiFeedback: aiEvaluation,
@@ -589,6 +551,8 @@ export const LevelPage: React.FC = () => {
     const currentTask = tasks[currentTaskIndex];
     const isLastTask = currentTaskIndex === tasks.length - 1;
 
+    const suggestions = feedback?.aiFeedback ? Array.of(...feedback.aiFeedback.good, ...feedback.aiFeedback.bad).filter((elem) => elem.length != 0) : []
+
     return (
         <div className="max-w-4xl mx-auto">
             {/* Header */}
@@ -635,86 +599,96 @@ export const LevelPage: React.FC = () => {
                         <div className="mb-8">
                             <h3 className="text-lg font-medium text-gray-800 mb-4">Deine Antwort:</h3>
 
-                            {currentTask.type === 'mc' ? (
-                                <div className="space-y-4">
-                                    {options.map((option) => (
-                                        <label
-                                            key={option.id}
-                                            className="flex items-start space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                                        >
-                                            <input
-                                                type="radio"
-                                                name={`task-${currentTask.id}`}
-                                                value={option.id}
-                                                checked={answers[currentTask.id] === option.id}
-                                                onChange={(e) => handleAnswerChange(currentTask.id, e.target.value)}
-                                                className="mt-1 text-green-600 focus:ring-green-500"
-                                            />
-                                            <span className="text-gray-700">{option.option_text}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div>
-                  <textarea
-                      value={answers[currentTask.id] || ''}
-                      onChange={(e) => handleAnswerChange(currentTask.id, e.target.value)}
-                      placeholder="Schreibe deine Antwort hier..."
-                      className="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-                  />
-                                </div>
-                            )}
+                            {
+                                currentTask.type === 'MC' ? (
+                                    <>
+                                        <div className="space-y-4">
+                                            {options.map((option) => (
+                                                <label
+                                                    key={option.id}
+                                                    className="flex items-start space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name={`task-${currentTask.id}`}
+                                                        value={option.id}
+                                                        checked={answers[currentTask.id] === option.id}
+                                                        onChange={(e) => handleAnswerChange(currentTask.id, e.target.value)}
+                                                        className="mt-1 text-green-600 focus:ring-green-500"
+                                                    />
+                                                    <span className="text-gray-700">{option.option_text}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+
+                                        <div className="flex items-center space-x-2 mb-4">
+                                            <Brain className="h-5 w-5 text-purple-600"/>
+                                            <h3 className="text-lg font-medium text-gray-800">Wissenschaftliche
+                                                Begründung
+                                                (Pflichtfeld):</h3>
+                                        </div>
+
+                                        <div
+                                            className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 mb-4">
+                                            <p className="text-sm text-purple-700">
+                                                <strong>🤖 KI-Analyse:</strong> Erkläre deine Antwort wissenschaftlich
+                                                fundiert.
+                                                Das System bewertet deine Begründung auf fachliche Korrektheit,
+                                                Verwendung von
+                                                Fachbegriffen
+                                                und logische Struktur. Je besser deine Begründung, desto hilfreicher das
+                                                Feedback!
+                                            </p>
+                                            <div className="mt-2 text-xs text-purple-600">
+                                                💡 <strong>Verwende Fachbegriffe wie:</strong> Radioaktivität, Strahlung,
+                                                Dosis,
+                                                Zerfall, Isotop, Schutz, Abschirmung
+                                            </div>
+                                        </div>
+
+                                        <textarea
+                                            value={reasoning[currentTask.id] || ''}
+                                            onChange={(e) => handleReasoningChange(currentTask.id, e.target.value)}
+                                            placeholder="Begründe hier deine Antwort wissenschaftlich...
+
+Beispiel: 'Ich wähle den Strahlenschutzanzug, weil er speziell entwickelt wurde, um vor radioaktiver Strahlung zu schützen. Radioaktive Strahlung kann Zellen schädigen und die Dosis in mSv erhöhen. Ein normales T-Shirt bietet keinen Schutz vor Alpha-, Beta- oder Gammastrahlung...'"
+                                            className="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                                            required
+                                        />
+
+                                        <div className="flex justify-between items-center mt-2">
+                                            <p className="text-sm text-gray-500">
+                                                Zeichen: {(reasoning[currentTask.id] || '').length} / mindestens 10
+                                            </p>
+                                            <p className="text-sm text-purple-600">
+                                                🧠 Intelligente KI-Bewertung deiner Argumentation!
+                                            </p>
+                                        </div>
+
+                                    </>
+
+                                ) : (
+                                    <div>
+                                        <textarea
+                                            value={answers[currentTask.id] || ''}
+                                            onChange={(e) => handleAnswerChange(currentTask.id, e.target.value)}
+                                            placeholder="Schreibe deine Antwort hier..."
+                                            className="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                                        />
+                                    </div>
+                                )
+                            }
                         </div>
 
                         {/* Reasoning Section */}
-                        <div className="mb-8">
-                            <div className="flex items-center space-x-2 mb-4">
-                                <Brain className="h-5 w-5 text-purple-600"/>
-                                <h3 className="text-lg font-medium text-gray-800">Wissenschaftliche Begründung
-                                    (Pflichtfeld):</h3>
-                            </div>
-
-                            <div
-                                className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 mb-4">
-                                <p className="text-sm text-purple-700">
-                                    <strong>🤖 KI-Analyse:</strong> Erkläre deine Antwort wissenschaftlich fundiert.
-                                    Das System bewertet deine Begründung auf fachliche Korrektheit, Verwendung von
-                                    Fachbegriffen
-                                    und logische Struktur. Je besser deine Begründung, desto hilfreicher das Feedback!
-                                </p>
-                                <div className="mt-2 text-xs text-purple-600">
-                                    💡 <strong>Verwende Fachbegriffe wie:</strong> Radioaktivität, Strahlung, Dosis,
-                                    Zerfall, Isotop, Schutz, Abschirmung
-                                </div>
-                            </div>
-
-                            <textarea
-                                value={reasoning[currentTask.id] || ''}
-                                onChange={(e) => handleReasoningChange(currentTask.id, e.target.value)}
-                                placeholder="Begründe hier deine Antwort wissenschaftlich...
-
-Beispiel: 'Ich wähle den Strahlenschutzanzug, weil er speziell entwickelt wurde, um vor radioaktiver Strahlung zu schützen. Radioaktive Strahlung kann Zellen schädigen und die Dosis in mSv erhöhen. Ein normales T-Shirt bietet keinen Schutz vor Alpha-, Beta- oder Gammastrahlung...'"
-                                className="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-                                required
-                            />
-
-                            <div className="flex justify-between items-center mt-2">
-                                <p className="text-sm text-gray-500">
-                                    Zeichen: {(reasoning[currentTask.id] || '').length} / mindestens 10
-                                </p>
-                                <p className="text-sm text-purple-600">
-                                    🧠 Intelligente KI-Bewertung deiner Argumentation!
-                                </p>
-                            </div>
-                        </div>
 
                         <div className="flex justify-end">
                             <button
                                 onClick={handleAnswerSubmit}
                                 disabled={
                                     !answers[currentTask.id] ||
-                                    !reasoning[currentTask.id] ||
-                                    reasoning[currentTask.id].trim().length < 10 ||
+                                    (currentTask.type === 'MC' && (!reasoning[currentTask.id] ||
+                                        reasoning[currentTask.id].trim().length <= 10)) ||
                                     submitting ||
                                     evaluatingReasoning
                                 }
@@ -750,9 +724,9 @@ Beispiel: 'Ich wähle den Strahlenschutzanzug, weil er speziell entwickelt wurde
                             {/* Answer Feedback */}
                             <div className="text-center">
                                 <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${
-                                    feedback.isCorrect ? 'bg-green-100' : 'bg-red-100'
+                                    feedback.correctness ? 'bg-green-100' : 'bg-red-100'
                                 }`}>
-                                    {feedback.isCorrect ? (
+                                    {feedback.correctness > 0 ? (
                                         <CheckCircle className="h-8 w-8 text-green-600"/>
                                     ) : (
                                         <XCircle className="h-8 w-8 text-red-600"/>
@@ -760,9 +734,9 @@ Beispiel: 'Ich wähle den Strahlenschutzanzug, weil er speziell entwickelt wurde
                                 </div>
 
                                 <h3 className={`text-2xl font-bold mb-2 ${
-                                    feedback.isCorrect ? 'text-green-800' : 'text-red-800'
+                                    feedback.correctness > 0 ? 'text-green-800' : 'text-red-800'
                                 }`}>
-                                    {feedback.isCorrect ? 'Richtig!' : 'Nicht ganz richtig'}
+                                    {feedback.correctness > 0 ? 'Richtig!' : 'Nicht ganz richtig'}
                                 </h3>
                                 <p className="text-gray-700 text-lg">{feedback.feedback}</p>
                             </div>
@@ -786,44 +760,47 @@ Beispiel: 'Ich wähle den Strahlenschutzanzug, weil er speziell entwickelt wurde
                             </div>
 
                             {/* AI Feedback on Reasoning */}
-                            <div
-                                className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6">
-                                <div className="flex items-start space-x-3 mb-4">
-                                    <Brain className="h-6 w-6 text-purple-600 mt-1"/>
-                                    <div className="flex-1">
-                                        <div className="flex items-center space-x-3 mb-2">
-                                            <h4 className="font-semibold text-purple-800">🤖 KI-Bewertung deiner
-                                                Begründung:</h4>
-                                            {feedback.aiFeedback.feedback && (
-                                                <div
-                                                    className={`px-3 py-1 rounded-full text-sm font-medium border ${getQualityColor(feedback.aiFeedback.score)}`}>
-                                                    {feedback.aiFeedback.score}/10 • {getQualityText(feedback.aiFeedback.score)}
-                                                </div>
-                                            )}
+                            {feedback.aiFeedback ?
+                                <div
+                                    className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6">
+                                    <div className="flex items-start space-x-3 mb-4">
+                                        <Brain className="h-6 w-6 text-purple-600 mt-1"/>
+                                        <div className="flex-1">
+                                            <div className="flex items-center space-x-3 mb-2">
+                                                <h4 className="font-semibold text-purple-800">🤖 KI-Bewertung deiner
+                                                    Begründung:</h4>
+                                                {feedback.aiFeedback.summary && (
+                                                    <div
+                                                        className={`px-3 py-1 rounded-full text-sm font-medium border ${getQualityColor(feedback.aiFeedback.score)}`}>
+                                                        {feedback.aiFeedback.score}/10
+                                                        • {getQualityText(feedback.aiFeedback.score)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <p className="text-purple-700 leading-relaxed">{feedback.aiFeedback.summary}</p>
                                         </div>
-                                        <p className="text-purple-700 leading-relaxed">{feedback.aiFeedback.feedback}</p>
                                     </div>
-                                </div>
 
-                                {/* AI Suggestions */}
-                                {feedback.aiFeedback.suggestions && feedback.aiFeedback.suggestions.length > 0 && (
-                                    <div className="mt-4 p-4 bg-white/50 rounded-lg">
-                                        <div className="flex items-center space-x-2 mb-2">
-                                            <Lightbulb className="h-4 w-4 text-yellow-600"/>
-                                            <h5 className="font-medium text-purple-800">Verbesserungsvorschläge:</h5>
+                                    {/* AI Suggestions */}
+                                    {suggestions.length > 0 && (
+                                        <div className="mt-4 p-4 bg-white/50 rounded-lg">
+                                            <div className="flex items-center space-x-2 mb-2">
+                                                <Lightbulb className="h-4 w-4 text-yellow-600"/>
+                                                <h5 className="font-medium text-purple-800">Verbesserungsvorschläge:</h5>
+                                            </div>
+                                            <ul className="space-y-1">
+                                                {suggestions.map((suggestion: string, index: number) => (
+                                                    <li key={index}
+                                                        className="text-sm text-purple-600 flex items-start space-x-2">
+                                                        <span className="text-yellow-500 mt-1">•</span>
+                                                        <span>{suggestion}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
                                         </div>
-                                        <ul className="space-y-1">
-                                            {feedback.aiFeedback.suggestions.map((suggestion: string, index: number) => (
-                                                <li key={index}
-                                                    className="text-sm text-purple-600 flex items-start space-x-2">
-                                                    <span className="text-yellow-500 mt-1">•</span>
-                                                    <span>{suggestion}</span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
+                                    )}
+                                </div> :
+                                <></>}
 
                             {/* Show User's Reasoning */}
                             <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">

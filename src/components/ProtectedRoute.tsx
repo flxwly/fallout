@@ -1,15 +1,15 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { roles } from '../supabase/supabase';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requireAdmin?: boolean;
+  permissionLevel: number;
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
-  children, 
-  requireAdmin = false 
+  children, permissionLevel = 0
 }) => {
   const { user, loading } = useAuth();
 
@@ -21,11 +21,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  if (!user) {
+  if (!user.profile || !user.stats) {
     return <Navigate to="/login" replace />;
   }
 
-  if (requireAdmin && user.role !== 'ADMIN') {
+  if (permissionLevel > roles.indexOf(user.profile?.permission_level || 'STUDENT')) {
     return <Navigate to="/" replace />;
   }
 

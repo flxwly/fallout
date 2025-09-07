@@ -18,8 +18,8 @@ export const ProfilePage: React.FC = () => {
             <User className="h-10 w-10 text-green-600" />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-gray-800">{user?.username}</h2>
-            <p className="text-gray-600 capitalize">{user?.role}</p>
+            <h2 className="text-2xl font-bold text-gray-800">{user?.profile?.username}</h2>
+            <p className="text-gray-600 capitalize">{user?.profile?.permission_level}</p>
           </div>
         </div>
 
@@ -29,7 +29,7 @@ export const ProfilePage: React.FC = () => {
               Benutzername
             </label>
             <div className="p-3 bg-gray-50 rounded-md text-gray-800">
-              {user?.username}
+              {user?.profile?.username}
             </div>
           </div>
 
@@ -38,13 +38,13 @@ export const ProfilePage: React.FC = () => {
               E-Mail
             </label>
             <div className="p-3 bg-gray-50 rounded-md text-gray-800">
-              {user?.email || 'Keine E-Mail hinterlegt'}
+              {user?.profile?.email || 'Keine E-Mail hinterlegt'}
             </div>
           </div>
         </div>
       </div>
 
-      {user?.role === 'STUDENT' && (
+      {user?.profile?.permission_level === 'STUDENT' && (
         <div className="bg-white rounded-lg shadow-lg p-8">
           <h3 className="text-xl font-bold text-gray-800 mb-6">Spielstatistiken</h3>
 
@@ -52,7 +52,7 @@ export const ProfilePage: React.FC = () => {
             <div className="text-center p-6 bg-green-50 rounded-lg border border-green-200">
               <Trophy className="h-12 w-12 text-green-600 mx-auto mb-3" />
               <div className="text-3xl font-bold text-green-800 mb-1">
-                {user.knowledge_points}
+                {user.stats?.knowledge_points}
               </div>
               <div className="text-sm text-green-600">Wissenspoints</div>
             </div>
@@ -60,7 +60,7 @@ export const ProfilePage: React.FC = () => {
             <div className="text-center p-6 bg-yellow-50 rounded-lg border border-yellow-200">
               <AlertTriangle className="h-12 w-12 text-yellow-600 mx-auto mb-3" />
               <div className="text-3xl font-bold text-yellow-800 mb-1">
-                {user.dose_msv.toFixed(1)}
+                {user.stats?.dose_msv.toFixed(1)}
               </div>
               <div className="text-sm text-yellow-600">mSv Strahlendosis</div>
             </div>

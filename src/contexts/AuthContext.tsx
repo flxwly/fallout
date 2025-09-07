@@ -1,21 +1,24 @@
 import React, {createContext, useContext, useEffect, useState} from 'react'
-import {supabase, type User} from '../supabase/supabase.ts'
+import {type Role, supabase, type UserProfile, type UserStats} from '../supabase/supabase.ts'
 import type {Session} from '@supabase/supabase-js'
 
 interface AuthContextType {
-    user: User | null
+    // TODO: Change this...
+    user: {profile: UserProfile | null, stats: UserStats | null}
     session: Session | null
     loading: boolean
     signIn: (username: string, password: string) => Promise<{ error?: string }>
     signUp: (username: string, email: string, password: string) => Promise<{ error?: string }>
     signOut: () => Promise<void>
-    updateUser: (userData: Partial<User>) => void
+    updateProfile: (userData: Partial<UserProfile>) => void
+    updateStats: (statsData: Partial<UserStats>) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({children}: { children: React.ReactNode }) {
-    const [user, setUser] = useState<User | null>(null)
+    const [user, setUser] = useState<UserProfile | null>(null)
+    const [stats, setStats] = useState<UserStats | null>(null)
     const [session, setSession] = useState<Session | null>(null)
     const [loading, setLoading] = useState(true)
 
@@ -23,21 +26,25 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
         // Get initial session
         supabase.auth.getSession().then(({data: {session}}) => {
             setSession(session)
+            setLoading(true)
             if (session?.user) {
-                void fetchUserProfile(session.user.id)
+                void fetchUser(session.user.id)
             } else {
+                setUser(null)
+                setStats(null)
                 setLoading(false)
             }
         })
 
         // Listen for auth changes
-        const {data: {subscription}} = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const {data: {subscription}} = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session)
-            console.log("Session changed: ", session)
+            setLoading(true)
             if (session?.user) {
-                await fetchUserProfile(session.user.id)
+                void fetchUser(session.user.id)
             } else {
                 setUser(null)
+                setStats(null)
                 setLoading(false)
             }
         })
@@ -45,26 +52,74 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
         return () => subscription.unsubscribe()
     }, [])
 
-    const fetchUserProfile = async (userId: string) => {
-        try {
-            console.log("Fetching user profile for user: ", userId)
-            const {data, error} = await supabase
-                .from('user_profiles')
-                .select('*')
-                .eq('id', userId)
-                .single()
+    const fetchUser = async (userId: string) => {
+        const {data: profile, error: profileError} = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('user_id', userId)
+            .single()
 
-            if (error) throw error
-            setUser(data)
-        } catch (error) {
-            console.error('Error fetching user profile:', error)
-        } finally {
-            setLoading(false)
+        const {data: stats, error: statsError} = await supabase
+            .from('user_stats')
+            .select('*')
+            .eq('user_id', userId)
+            .single()
+
+        if (profileError) {
+            console.error('Error fetching user profile:', profileError)
+            return
+        } else if (statsError) {
+            console.error('Error fetching user profile:', statsError)
+            return
         }
+
+        setUser(profile)
+        setStats(stats)
+
+        setLoading(false)
     }
 
-    const updateUser = (userData: Partial<User>) => {
+    const createUser = async (
+        userId: string,
+        username: string,
+        email: string,
+        permission_level: Role
+    ) => {
+
+        setLoading(true)
+        const userProfile: UserProfile = {
+            user_id: userId,
+            username: username,
+            email: email,
+            permission_level: permission_level,
+            created_at: new Date().toISOString()
+        }
+
+        const {error: profileError} = await supabase
+            .from('user_profiles')
+            .insert(userProfile)
+
+        const {error: statsError} = await supabase
+            .from('user_stats')
+            .insert({user_id: userId})
+
+        if (profileError) {
+            console.error('Error creating user profile:', profileError)
+            return null
+        } else if (statsError) {
+            console.error('Error creating user stats:', statsError)
+            return null
+        }
+
+        setLoading(false)
+    }
+
+    const updateProfile = (userData: Partial<UserProfile>) => {
         setUser(prev => prev ? {...prev, ...userData} : null)
+    }
+
+    const updateStats = (statsData: Partial<UserStats>) => {
+        setStats(prev => prev ? {...prev, ...statsData} : null)
     }
 
     const signIn = async (username: string, password: string) => {
@@ -72,17 +127,15 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
             // Handle demo credentials specially
             if (username === 'admin' && password === 'admin123') {
                 // Create a demo admin session
-                console.log("Logging in as demo admin")
-                const demoUser: User = {
-                    id: 'demo-admin-id',
+                const demoUser: UserProfile = {
+                    user_id: 'demo-admin-id',
                     username: 'admin',
                     email: 'admin@example.com',
-                    role: "ADMIN",
-                    knowledge_points: 0,
-                    dose_msv: 0,
+                    permission_level: "ADMIN",
                     created_at: new Date().toISOString()
                 }
                 setUser(demoUser)
+                setStats({dose_msv: 0, knowledge_points: 0, user_id: 'demo-admin-id'})
                 const session: Session = {
                     access_token: 'demo-token',
                     refresh_token: 'demo-refresh',
@@ -99,22 +152,20 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                         user_metadata: {}
                     }
                 }
-                console.log(demoUser)
                 setSession(session)
                 return {}
             }
             if (username === 'student1' && password === 'admin123') {
                 // Create a demo student session
-                const demoUser: User = {
-                    id: 'demo-student-id',
+                const demoUser: UserProfile = {
+                    user_id: 'demo-student-id',
                     username: 'student1',
                     email: 'student1@example.com',
-                    role: "STUDENT",
-                    knowledge_points: 15,
-                    dose_msv: 0.5,
+                    permission_level: "STUDENT",
                     created_at: new Date().toISOString()
                 }
                 setUser(demoUser)
+                setStats({dose_msv: 0, knowledge_points: 0, user_id: 'demo-student-id'})
                 setSession({
                     access_token: 'demo-token',
                     refresh_token: 'demo-refresh',
@@ -135,7 +186,7 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
             // For non-demo users, try the regular Supabase auth flow
             const {data: userData, error: userError} = await supabase
                 .from('user_profiles')
-                .select('email')
+                .select('*')
                 .eq('username', username)
                 .single()
 
@@ -160,66 +211,37 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
     }
 
     const signUp = async (username: string, email: string, password: string) => {
-        try {
 
-            console.log("Sign up for user: ", username, email, password)
+        // Check if username already exists
+        const {data: existingUser} = await supabase
+            .from('user_profiles')
+            .select('username', {head: true, count: 'exact'})
+            .eq('username', username)
+            .single()
 
-            // Check if username already exists
-            const {data: existingUser} = await supabase
-                .from('user_profiles')
-                .select('username')
-                .eq('username', username)
-                .single()
-
-            console.log(existingUser)
-
-            if (existingUser) {
-                return {error: 'Username already exists'}
-            }
-
-            console.log("\tsupabase sign up...")
-
-            const {data, error} = await supabase.auth.signUp({
-                email,
-                password,
-            })
-
-            if (error) {
-                return {error: error.message}
-            }
-
-            if (data.user) {
-                // Create user profile
-                console.log("Creating new user profile")
-
-                const {error: profileError} = await supabase
-                    .from('user_profiles')
-                    .insert({
-                        id: data.user.id,
-                        username: username,
-                        email: email,
-                        role: "STUDENT",
-                        knowledge_points: 0,
-                        dose_msv: 0.0,
-                    })
-
-                if (profileError) {
-                    return {error: 'Failed to create user profile'}
-                }
-            } else {
-                console.error("couldn't get user data")
-            }
-
-            return {}
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (error) {
-            return {error: 'An unexpected error occurred'}
+        if (existingUser) {
+            return {error: 'Username already exists'}
         }
+
+        const {data: authDetails, error} = await supabase.auth.signUp({
+            email,
+            password,
+        })
+
+        if (error) {
+            return {error: error.message}
+        }
+
+        void createUser(authDetails.user!.id, username, email, 'STUDENT')
+        setSession(authDetails.session)
+
+        return {}
     }
 
     const signOut = async () => {
         // Clear demo session
         setUser(null)
+        setStats(null)
         setSession(null)
 
         // Also sign out from Supabase if there's a real session
@@ -227,13 +249,14 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
     }
 
     const value = {
-        user,
+        user: {profile: user, stats: stats},
         session,
         loading,
         signIn,
         signUp,
         signOut,
-        updateUser,
+        updateProfile,
+        updateStats
     }
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

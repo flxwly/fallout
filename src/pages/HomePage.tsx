@@ -26,7 +26,7 @@ export const HomePage: React.FC = () => {
                     der Wasteland!
                 </p>
 
-                {user ? (user.role === 'STUDENT' ? (<Link
+                {user.profile && user.stats ? (user.profile?.permission_level === 'STUDENT' ? (<Link
                             to="/game"
                             className="inline-flex items-center space-x-2 px-8 py-4 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-lg hover:from-red-700 hover:to-orange-700 transition-all text-lg font-semibold shadow-lg"
                         >
@@ -188,7 +188,7 @@ export const HomePage: React.FC = () => {
             </div>
 
             {/* Demo Section */}
-            {!user && (<div
+            {!user.profile || !user.stats && (<div
                     className="bg-gradient-to-r from-red-600 via-orange-600 to-yellow-600 rounded-lg p-8 text-center text-white relative overflow-hidden">
                     <div className="absolute inset-0 bg-black opacity-10"></div>
                     <div className="relative z-10">
