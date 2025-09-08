@@ -18,7 +18,7 @@ function App() {
     return (
         <div className="bg-gray-100">
             <div className="bg-green-500 h-16">
-                <h1 className="text-center text-white text-3xl font-bold">Demo Version! (Aus praktischen )</h1>
+                <h1 className="text-center text-white text-3xl font-bold">Demo Version!</h1>
             </div>
             <AuthProvider>
                 <GameProvider>

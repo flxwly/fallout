@@ -4,7 +4,7 @@ import {useGame} from '../contexts/GameContext';
 import {useAuth} from '../contexts/AuthContext';
 import {AlertTriangle, ArrowLeft, Brain, CheckCircle, Lightbulb, Send, XCircle} from 'lucide-react';
 import {AnimatePresence, motion} from 'framer-motion';
-import { Mistral } from '@mistralai/mistralai';
+import {Mistral} from '@mistralai/mistralai';
 import toast from 'react-hot-toast';
 import {supabase} from "../supabase/supabase.ts";
 
@@ -214,36 +214,26 @@ export const LevelPage: React.FC = () => {
         ) : undefined
         if (!aiPrompt) throw "Exactly one answer must be provided"
 
-        /*console.log("A")
-        const mistralClient = new Mistral({apiKey: import.meta.env.MISTRAL_API_KEY});
+        const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
+        const mistralClient = new Mistral({apiKey: apiKey});
 
         const response = await mistralClient.chat.complete({
-            model: 'mistral-large-latest',
+            model: 'mistral-small-latest',
             messages: [{role: 'user', content: levelText + "\n" + aiPrompt}],
         })
-        console.log("C")
 
-        console.log("Antwort:", response)*/
-
-        const response = await fetch("http://localhost:11434/api/generate", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                model: "deepseek-r1:8b",
-                prompt: levelText + "\n" + aiPrompt,
-                type: "json",
-                stream: false,
-            }),
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! ${response.status}`);
+        if (response.choices.length === 0) {
+            console.error("No AI response received");
+            return {
+                score: 0,
+                summary: "Es konnte kein KI Feedback generiert werden.",
+                good: [],
+                bad: []
+            };
         }
 
-        const data = await response.json();
-        const cleaned = data.response.replace(/<think>[\s\S]*?<\/think>/, "").trim();
+        const data = response.choices[0];
+        const cleaned = data.message.content ? data.message.content.toString().replace(/<think>[\s\S]*?<\/think>/, "").trim() : "";
         const jsonMatch = cleaned.match(/```json([\s\S]*?)```/);
         const jsonString = jsonMatch ? jsonMatch[1] : cleaned;
 
@@ -264,6 +254,7 @@ export const LevelPage: React.FC = () => {
                 bad: []
             };
         }
+
     }
 
     const handleAnswerSubmit = async () => {
@@ -373,7 +364,10 @@ export const LevelPage: React.FC = () => {
                 console.error("Couldn't upload attempt data to Database", error);
             }
 
-            updateStats({knowledge_points: user.stats.knowledge_points + pointsAwarded, dose_msv: user.stats.dose_msv + doseReceived})
+            updateStats({
+                knowledge_points: user.stats.knowledge_points + pointsAwarded,
+                dose_msv: user.stats.dose_msv + doseReceived
+            })
 
             setFeedback({
                 correctness: aiEvaluation?.score || 0,
